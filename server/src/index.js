@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import { pathToFileURL } from "node:url";
 
 const app = express();
 const port = Number(process.env.PORT) || 4000;
@@ -15,7 +16,7 @@ app.get("/api/health", (_req, res) => {
     status: "ok",
     service: "claimsync-api",
     timestamp: new Date().toISOString(),
-    version: process.env.npm_package_version || "0.1.0"
+    version: "0.1.0"
   });
 });
 
@@ -38,6 +39,11 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`CLAIMSYNC API listening on http://localhost:${port}`);
-});
+const isEntrypoint = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isEntrypoint) {
+  app.listen(port, () => {
+    console.log(`CLAIMSYNC API listening on http://localhost:${port}`);
+  });
+}
+
+export default app;
