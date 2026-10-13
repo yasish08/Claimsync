@@ -1,7 +1,9 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import express from "express";
 import cors from "cors";
-import { pathToFileURL } from "node:url";
+
+dotenv.config({ path: fileURLToPath(new URL("../../.env", import.meta.url)) });
 
 const app = express();
 const port = Number(process.env.PORT) || 4000;
