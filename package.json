@@ -1,0 +1,23 @@
+{
+  "name": "claimsync",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Intelligent insurance claims processing platform",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:client": "npm run dev --workspace @claimsync/client",
+    "dev:server": "npm run dev --workspace @claimsync/server",
+    "build": "npm run build --workspace @claimsync/client",
+    "start": "npm run start --workspace @claimsync/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
