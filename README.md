@@ -21,6 +21,30 @@ An MVP insurance claims workflow platform for claim intake, validation, priority
 6. Notify users about assignments and deadline risks.
 7. View workload and outcome analytics.
 
+## Run locally
+
+Requirements: Node.js 20 or newer and npm.
+
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
+
+The web app runs at `http://localhost:5173` and the API at `http://localhost:4000`. The API health endpoint is `http://localhost:4000/api/health`. The initial dashboard deliberately shows placeholder metrics until the database-backed claims workflow is implemented. PostgreSQL and Redis are not wired up in this first foundation commit.
+
+To run the API tests:
+
+```bash
+npm test --workspace @claimsync/server
+```
+
+To create a production frontend build:
+
+```bash
+npm run build
+```
+
 ## Architecture decision
 Start with one modular Express application rather than separate microservices. PostgreSQL is the source of truth; Redis is a recoverable queue/index.
 
