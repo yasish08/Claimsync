@@ -1,109 +1,206 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
-const initialMetrics = [
-  { label: "Open claims", value: "—", note: "Awaiting live claim data", icon: "◫" },
-  { label: "High priority", value: "—", note: "Priority queue will appear here", icon: "↗" },
-  { label: "SLA at risk", value: "—", note: "Deadline monitoring planned", icon: "◷" },
-  { label: "Resolved today", value: "—", note: "Resolution analytics planned", icon: "✓" }
+const navGroups = [
+  { label: "WORKSPACE", items: [
+    { icon: "▦", label: "Overview" },
+    { icon: "▤", label: "Claims", soon: true },
+    { icon: "⇅", label: "Priority queue", soon: true },
+    { icon: "＋", label: "Submit a claim", soon: true },
+    { icon: "▥", label: "Analytics", soon: true }
+  ]},
+  { label: "MANAGEMENT", items: [
+    { icon: "♙", label: "Agents", soon: true },
+    { icon: "◷", label: "SLA settings", soon: true }
+  ]}
 ];
 
+const metrics = [
+  { label: "Total claims", value: "—", detail: "Waiting for database connection", icon: "▤", tone: "blue" },
+  { label: "Awaiting review", value: "—", detail: "Claim workflow is next", icon: "◷", tone: "amber" },
+  { label: "SLA at risk", value: "—", detail: "Deadline tracking is planned", icon: "!", tone: "rose" },
+  { label: "Resolved today", value: "—", detail: "Resolution analytics planned", icon: "✓", tone: "mint" }
+];
+
+function Glyph({ children, className = "" }) {
+  return <span className={\`glyph \${className}\`} aria-hidden="true">{children}</span>;
+}
+
 export default function App() {
-  const [api, setApi] = useState({ state: "checking", message: "Checking API…" });
+  const [api, setApi] = useState({ state: "checking", message: "Checking connection" });
+  const [activeNav, setActiveNav] = useState("Overview");
+  const [search, setSearch] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    fetch(`${API_URL}/api/health`, { signal: controller.signal })
+    fetch(\`\${API_URL}/api/health\`, { signal: controller.signal })
       .then((response) => {
-        if (!response.ok) throw new Error("API returned an error");
+        if (!response.ok) throw new Error("API unavailable");
         return response.json();
       })
       .then((data) => setApi({
         state: "online",
-        message: `API online · ${new Date(data.timestamp).toLocaleTimeString()}`
+        message: \`Connected at \${new Date(data.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}\`
       }))
-      .catch(() => setApi({
-        state: "offline",
-        message: "API offline · Start the server to connect"
-      }))
-      .finally(() => clearTimeout(timeout));
+      .catch(() => setApi({ state: "offline", message: "API offline · Start the server to connect" }))
+      .finally(() => clearTimeout(timeoutId));
 
     return () => {
-      clearTimeout(timeout);
+      clearTimeout(timeoutId);
       controller.abort();
     };
   }, []);
 
+  const filteredNav = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return navGroups;
+    return navGroups.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.label.toLowerCase().includes(query))
+    })).filter((group) => group.items.length > 0);
+  }, [search]);
+
+  const selectNav = (item) => {
+    if (item.soon) {
+      setNotice(\`\${item.label} will be enabled as that workflow is implemented.\`);
+      return;
+    }
+    setActiveNav(item.label);
+    setNotice("");
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="/" aria-label="CLAIMSYNC home">
+        <a className="brand" href="#overview" onClick={() => selectNav({ label: "Overview" })} aria-label="CLAIMSYNC home">
           <span className="brand-mark">C</span>
-          <span>CLAIM<span className="brand-light">SYNC</span><small>CLAIMS OPERATIONS</small></span>
+          <span className="brand-word">CLAIM<span>SYNC</span><small>CLAIMS OPERATIONS</small></span>
         </a>
-        <div className="nav-label">WORKSPACE</div>
-        <nav aria-label="Main navigation">
-          <a className="nav-item active" href="#overview"><span>▦</span> Overview</a>
-          <a className="nav-item disabled" href="#claims" aria-disabled="true"><span>▤</span> Claims <em>SOON</em></a>
-          <a className="nav-item disabled" href="#queue" aria-disabled="true"><span>⇅</span> Priority queue <em>SOON</em></a>
-          <a className="nav-item disabled" href="#team" aria-disabled="true"><span>♙</span> Team workload <em>SOON</em></a>
-          <a className="nav-item disabled" href="#analytics" aria-disabled="true"><span>▥</span> Analytics <em>SOON</em></a>
-        </nav>
-        <div className="sidebar-bottom">
-          <span className={`status-dot ${api.state}`}></span>
-          <div><strong>System status</strong><small>{api.message}</small></div>
+
+        <div className="workspace-switcher">
+          <div className="workspace-monogram">N</div>
+          <div className="workspace-copy"><strong>Northstar Insurance</strong><small>Operations workspace</small></div>
+          <span className="switcher-arrow">⌄</span>
         </div>
+
+        {filteredNav.map((group) => (
+          <section className="nav-group" key={group.label}>
+            <div className="nav-label">{group.label}</div>
+            <nav aria-label={group.label}>
+              {group.items.map((item) => (
+                <button
+                  type="button"
+                  key={item.label}
+                  className={\`nav-item \${activeNav === item.label ? "active" : ""} \${item.soon ? "nav-disabled" : ""}\`}
+                  onClick={() => selectNav(item)}
+                  aria-current={activeNav === item.label ? "page" : undefined}
+                >
+                  <Glyph>{item.icon}</Glyph><span>{item.label}</span>
+                  {item.soon && <small className="soon-label">SOON</small>}
+                </button>
+              ))}
+            </nav>
+          </section>
+        ))}
+
+        <div className="sidebar-grow" />
+        <div className="sidebar-help"><span className="help-mark">?</span><div><strong>Need a hand?</strong><small>Project guide coming soon</small></div><span className="external-mark">↗</span></div>
+        <div className="connection-card">
+          <span className={\`connection-dot \${api.state}\`} />
+          <div><strong>API connection</strong><small>{api.message}</small></div>
+          <span className={\`connection-state \${api.state}\`}>{api.state === "checking" ? "…" : api.state === "online" ? "●" : "○"}</span>
+        </div>
+        <div className="sidebar-user"><div className="user-avatar">CT</div><div><strong>Claims team</strong><small>Local development</small></div><span className="user-menu">•••</span></div>
       </aside>
 
       <main className="main-content" id="overview">
         <header className="topbar">
-          <div className="breadcrumb">Workspace <span>/</span> Overview</div>
-          <div className="topbar-right"><span className="env-tag">DEVELOPMENT</span><div className="avatar">CS</div></div>
+          <div className="mobile-brand"><span className="brand-mark">C</span><strong>CLAIMSYNC</strong></div>
+          <div className="breadcrumbs">Workspace <span>/</span> <strong>{activeNav}</strong></div>
+          <div className="topbar-tools">
+            <label className="search-field"><Glyph>⌕</Glyph><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a workspace section…" aria-label="Filter workspace navigation" /><kbd>⌘ K</kbd></label>
+            <button className="notification-button" type="button" aria-label="Notifications" onClick={() => setNotice("Notifications will appear here when claim events are connected.")}>♧<span className="notification-dot" /></button>
+            <div className="user-chip"><div className="user-avatar">CT</div><div><strong>Claims Team</strong><small>Administrator preview</small></div><span className="switcher-arrow">⌄</span></div>
+          </div>
         </header>
 
-        <section className="welcome">
-          <div>
-            <div className="eyebrow"><span className="eyebrow-line"></span> INTELLIGENT CLAIMS OPERATIONS</div>
-            <h1>Claims command center<span>.</span></h1>
-            <p>One clear view of claim priorities, service deadlines, and team operations.</p>
-          </div>
-          <div className="date-chip">{new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</div>
-        </section>
+        <div className="page-content">
+          {notice && <div className="notice-banner" role="status"><span>ⓘ</span>{notice}<button type="button" onClick={() => setNotice("")} aria-label="Dismiss message">×</button></div>}
 
-        <section className="metrics-grid" aria-label="Claims metrics">
-          {initialMetrics.map((metric) => (
-            <article className="metric-card" key={metric.label}>
-              <div className="metric-top"><span>{metric.label}</span><span className="metric-icon">{metric.icon}</span></div>
-              <div className="metric-value">{metric.value}</div>
-              <p>{metric.note}</p>
-            </article>
-          ))}
-        </section>
-
-        <section className="content-grid">
-          <article className="panel queue-panel">
-            <div className="panel-heading"><div><span className="section-kicker">OPERATIONS</span><h2>Priority queue</h2></div><span className="coming-tag">IN DEVELOPMENT</span></div>
-            <div className="empty-state">
-              <div className="empty-icon">⇅</div>
-              <h3>Your queue starts here</h3>
-              <p>Claims will be ranked by urgency, deadline risk, and business impact once the claim workflow is connected.</p>
-              <div className="progress-track"><span></span></div>
-              <small>FOUNDATION · API CONNECTIVITY</small>
+          <section className="welcome-section">
+            <div>
+              <div className="eyebrow"><span /> CLAIM OPERATIONS PLATFORM</div>
+              <h1>A clearer view of <span>every claim.</span></h1>
+              <p>Your command center for priorities, service deadlines, and team operations.</p>
             </div>
-          </article>
-          <article className="panel system-panel">
-            <div className="panel-heading"><div><span className="section-kicker">PLATFORM</span><h2>System checks</h2></div><span className="pulse"></span></div>
-            <div className="system-row"><span className="system-symbol">⌘</span><div><strong>Web application</strong><small>React + Vite</small></div><span className="check-state good">READY</span></div>
-            <div className="system-row"><span className="system-symbol">⌁</span><div><strong>REST API</strong><small>{api.message}</small></div><span className={`check-state ${api.state === "online" ? "good" : api.state === "offline" ? "bad" : ""}`}>{api.state.toUpperCase()}</span></div>
-            <div className="system-row"><span className="system-symbol">▤</span><div><strong>PostgreSQL</strong><small>Connection planned next</small></div><span className="check-state pending">PENDING</span></div>
-            <div className="system-row"><span className="system-symbol">↝</span><div><strong>Redis queue</strong><small>Priority processing planned</small></div><span className="check-state pending">PENDING</span></div>
-          </article>
-        </section>
+            <div className="welcome-controls">
+              <div className="date-chip"><Glyph>◷</Glyph>{new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</div>
+              <button className="new-claim-button" type="button" disabled title="Claim intake is part of the next milestone">＋ New claim</button>
+            </div>
+          </section>
 
-        <footer><span>CLAIMSYNC <span className="footer-separator">/</span> MVP 0.1.0</span><span>Built for reliable, explainable claims operations.</span></footer>
+          <section className="hero-banner">
+            <div className="hero-content">
+              <div className="hero-overline"><span>✳</span> A MORE THOUGHTFUL WAY TO HANDLE CLAIMS</div>
+              <h2>Less chasing.<br /><span>More clarity.</span></h2>
+              <p>Keep the work visible, put urgent claims first, and help every case move forward with confidence.</p>
+              <div className="hero-trust"><span>✓</span> Designed for clarity, accountability, and follow-through</div>
+            </div>
+            <div className="hero-visual" aria-hidden="true">
+              <div className="hero-halo halo-a" /><div className="hero-halo halo-b" />
+              <div className="orbit orbit-a" /><div className="orbit orbit-b" />
+              <div className="hero-check"><span>✓</span></div>
+              <div className="float-card float-card-a"><span className="float-icon blue">↗</span><span><b>Priority-led</b><small>Focus on what matters</small></span></div>
+              <div className="float-card float-card-b"><span className="float-icon green">◷</span><span><b>SLA-aware</b><small>Keep deadlines in view</small></span></div>
+              <span className="hero-spark spark-a">✦</span><span className="hero-spark spark-b">✳</span>
+            </div>
+          </section>
+
+          <section className="section-title-row">
+            <div><span className="section-eyebrow">YOUR WORKSPACE</span><h2>Operations overview</h2></div>
+            <div className="connection-label"><span className={\`tiny-dot \${api.state}\`} />{api.state === "online" ? "API connected" : api.state === "checking" ? "Connecting to API" : "Awaiting live data"}</div>
+          </section>
+
+          <section className="metrics-grid" aria-label="Claims overview">
+            {metrics.map((metric, index) => (
+              <article className="metric-card" key={metric.label} style={{ "--stagger": index }}>
+                <div className="metric-top"><span>{metric.label}</span><span className={\`metric-icon \${metric.tone}\`}><Glyph>{metric.icon}</Glyph></span></div>
+                <div className="metric-value">{metric.value}</div>
+                <div className="metric-footer"><span>{metric.detail}</span><span className={\`mini-chart chart-\${metric.tone}\`} aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></span></div>
+              </article>
+            ))}
+          </section>
+
+          <section className="dashboard-grid">
+            <article className="surface-card priority-card">
+              <div className="surface-heading"><div><span className="section-eyebrow">WHAT MATTERS NEXT</span><h2>Priority queue</h2><p>The right work, in the right order.</p></div><span className="status-pill">IN DEVELOPMENT</span></div>
+              <div className="empty-queue">
+                <div className="queue-art" aria-hidden="true"><div className="queue-paper paper-back" /><div className="queue-paper paper-front"><i /><i /><i /></div><div className="queue-badge">✓</div></div>
+                <h3>Your queue is taking shape</h3>
+                <p>Claims will be prioritized using urgency, deadline risk, and business impact when intake and scoring are connected.</p>
+                <div className="next-step"><span className="next-step-dot" /><span>Next milestone</span><b>Claim intake + priority scoring</b></div>
+              </div>
+            </article>
+
+            <article className="surface-card health-card">
+              <div className="surface-heading"><div><span className="section-eyebrow">UNDER THE HOOD</span><h2>Platform foundation</h2><p>A transparent view of what is connected.</p></div><span className="health-icon">⌁</span></div>
+              <div className="service-list">
+                <div className="service-row"><span className="service-icon frontend">◈</span><div><b>Web application</b><small>React + Vite</small></div><span className="service-status ready">READY</span></div>
+                <div className="service-row"><span className="service-icon backend">⌘</span><div><b>REST API</b><small>{api.message}</small></div><span className={\`service-status \${api.state}\`}>{api.state === "online" ? "ONLINE" : api.state === "offline" ? "OFFLINE" : "CHECKING"}</span></div>
+                <div className="service-row"><span className="service-icon database">▤</span><div><b>PostgreSQL</b><small>Schema setup is next</small></div><span className="service-status planned">PLANNED</span></div>
+                <div className="service-row"><span className="service-icon redis">⇄</span><div><b>Redis queue</b><small>Priority processing planned</small></div><span className="service-status planned">PLANNED</span></div>
+              </div>
+              <div className="health-footer"><span />Small milestones. Verified progress.</div>
+            </article>
+          </section>
+
+          <section className="closing-note"><span className="closing-icon">✳</span><div><b>Clarity first. Real data always.</b><p>These metrics are intentionally placeholders until the claims database is connected.</p></div><span className="version-tag">MVP <b>0.1.0</b></span></section>
+          <footer className="page-footer"><span><b>CLAIMSYNC</b><i>/</i> Claims operations</span><span>Built for reliable, explainable claims handling.</span></footer>
+        </div>
       </main>
     </div>
   );
