@@ -45,6 +45,20 @@ To create a production frontend build:
 npm run build
 ```
 
+## Run locally
+
+Requirements: Node.js 20+, npm, and a local PostgreSQL database.
+
+1. Install dependencies: `npm install`
+2. Copy `.env.example` to `.env` and set `DATABASE_URL` to your local PostgreSQL database.
+3. Generate the Prisma client: `npm run db:generate`
+4. Create the schema in the configured database: `npm run db:migrate`
+5. Start frontend and API: `npm run dev`
+
+The frontend is available at `http://localhost:5173`; the API defaults to `http://localhost:4000`. The health endpoint is `/api/health`. Claims API endpoints are `GET /api/claims`, `GET /api/claims/:id`, and `POST /api/claims`. Claim intake currently validates fields, assigns an explainable initial priority score, and writes an initial history event. Authentication and authorization are still to be added; do not expose this API publicly with real data until those controls are implemented.
+
+Run API tests with `npm test`, and build the frontend with `npm run build`. These commands should be run locally after dependency installation; a successful GitHub commit does not itself mean runtime tests have passed.
+
 ## Architecture decision
 Start with one modular Express application rather than separate microservices. PostgreSQL is the source of truth; Redis is a recoverable queue/index.
 
