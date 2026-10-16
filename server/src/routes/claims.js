@@ -3,6 +3,7 @@ import { prisma } from "../db.js";
 
 const router = Router();
 const allowedTypes = new Set(["AUTO", "HEALTH", "PROPERTY", "TRAVEL", "LIFE", "OTHER"]);
+const allowedStatuses = new Set(["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION", "APPROVED", "REJECTED", "CLOSED"]);
 
 function calculatePriority({ urgency, businessImpact, slaDeadline }) {
   const hoursRemaining = (new Date(slaDeadline).getTime() - Date.now()) / 3_600_000;
@@ -25,6 +26,8 @@ router.get("/", async (req, res, next) => {
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 20));
     const status = typeof req.query.status === "string" ? req.query.status.toUpperCase() : undefined;
     const type = typeof req.query.type === "string" ? req.query.type.toUpperCase() : undefined;
+    if (status && !allowedStatuses.has(status)) return res.status(400).json({ error: { code: "INVALID_STATUS", message: "Unsupported claim status filter." } });
+    if (type && !allowedTypes.has(type)) return res.status(400).json({ error: { code: "INVALID_TYPE", message: "Unsupported claim type filter." } });
     const where = {};
     if (status) where.status = status;
     if (type) where.type = type;
