@@ -12,7 +12,10 @@
     "dev:client": "npm run dev --workspace @claimsync/client",
     "dev:server": "npm run dev --workspace @claimsync/server",
     "build": "npm run build --workspace @claimsync/client",
-    "start": "npm run start --workspace @claimsync/server"
+    "start": "npm run start --workspace @claimsync/server",
+    "db:generate": "npm run db:generate --workspace @claimsync/server",
+    "db:migrate": "npm run db:migrate --workspace @claimsync/server",
+    "test": "npm test --workspace @claimsync/server"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
