@@ -24,7 +24,7 @@ const metrics = [
 ];
 
 function Glyph({ children, className = "" }) {
-  return <span className={\`glyph \${className}\`} aria-hidden="true">{children}</span>;
+  return <span className={`glyph ${className}`} aria-hidden="true">{children}</span>;
 }
 
 export default function App() {
@@ -37,14 +37,14 @@ export default function App() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    fetch(\`\${API_URL}/api/health\`, { signal: controller.signal })
+    fetch(`${API_URL}/api/health`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error("API unavailable");
         return response.json();
       })
       .then((data) => setApi({
         state: "online",
-        message: \`Connected at \${new Date(data.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}\`
+        message: `Connected at ${new Date(data.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
       }))
       .catch(() => setApi({ state: "offline", message: "API offline · Start the server to connect" }))
       .finally(() => clearTimeout(timeoutId));
@@ -66,7 +66,7 @@ export default function App() {
 
   const selectNav = (item) => {
     if (item.soon) {
-      setNotice(\`\${item.label} will be enabled as that workflow is implemented.\`);
+      setNotice(`${item.label} will be enabled as that workflow is implemented.`);
       return;
     }
     setActiveNav(item.label);
@@ -95,7 +95,7 @@ export default function App() {
                 <button
                   type="button"
                   key={item.label}
-                  className={\`nav-item \${activeNav === item.label ? "active" : ""} \${item.soon ? "nav-disabled" : ""}\`}
+                  className={`nav-item ${activeNav === item.label ? "active" : ""} ${item.soon ? "nav-disabled" : ""}`}
                   onClick={() => selectNav(item)}
                   aria-current={activeNav === item.label ? "page" : undefined}
                 >
@@ -110,9 +110,9 @@ export default function App() {
         <div className="sidebar-grow" />
         <div className="sidebar-help"><span className="help-mark">?</span><div><strong>Need a hand?</strong><small>Project guide coming soon</small></div><span className="external-mark">↗</span></div>
         <div className="connection-card">
-          <span className={\`connection-dot \${api.state}\`} />
+          <span className={`connection-dot ${api.state}`} />
           <div><strong>API connection</strong><small>{api.message}</small></div>
-          <span className={\`connection-state \${api.state}\`}>{api.state === "checking" ? "…" : api.state === "online" ? "●" : "○"}</span>
+          <span className={`connection-state ${api.state}`}>{api.state === "checking" ? "…" : api.state === "online" ? "●" : "○"}</span>
         </div>
         <div className="sidebar-user"><div className="user-avatar">CT</div><div><strong>Claims team</strong><small>Local development</small></div><span className="user-menu">•••</span></div>
       </aside>
@@ -162,15 +162,15 @@ export default function App() {
 
           <section className="section-title-row">
             <div><span className="section-eyebrow">YOUR WORKSPACE</span><h2>Operations overview</h2></div>
-            <div className="connection-label"><span className={\`tiny-dot \${api.state}\`} />{api.state === "online" ? "API connected" : api.state === "checking" ? "Connecting to API" : "Awaiting live data"}</div>
+            <div className="connection-label"><span className={`tiny-dot ${api.state}`} />{api.state === "online" ? "API connected" : api.state === "checking" ? "Connecting to API" : "Awaiting live data"}</div>
           </section>
 
           <section className="metrics-grid" aria-label="Claims overview">
             {metrics.map((metric, index) => (
               <article className="metric-card" key={metric.label} style={{ "--stagger": index }}>
-                <div className="metric-top"><span>{metric.label}</span><span className={\`metric-icon \${metric.tone}\`}><Glyph>{metric.icon}</Glyph></span></div>
+                <div className="metric-top"><span>{metric.label}</span><span className={`metric-icon ${metric.tone}`}><Glyph>{metric.icon}</Glyph></span></div>
                 <div className="metric-value">{metric.value}</div>
-                <div className="metric-footer"><span>{metric.detail}</span><span className={\`mini-chart chart-\${metric.tone}\`} aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></span></div>
+                <div className="metric-footer"><span>{metric.detail}</span><span className={`mini-chart chart-${metric.tone}`} aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></span></div>
               </article>
             ))}
           </section>
@@ -190,7 +190,7 @@ export default function App() {
               <div className="surface-heading"><div><span className="section-eyebrow">UNDER THE HOOD</span><h2>Platform foundation</h2><p>A transparent view of what is connected.</p></div><span className="health-icon">⌁</span></div>
               <div className="service-list">
                 <div className="service-row"><span className="service-icon frontend">◈</span><div><b>Web application</b><small>React + Vite</small></div><span className="service-status ready">READY</span></div>
-                <div className="service-row"><span className="service-icon backend">⌘</span><div><b>REST API</b><small>{api.message}</small></div><span className={\`service-status \${api.state}\`}>{api.state === "online" ? "ONLINE" : api.state === "offline" ? "OFFLINE" : "CHECKING"}</span></div>
+                <div className="service-row"><span className="service-icon backend">⌘</span><div><b>REST API</b><small>{api.message}</small></div><span className={`service-status ${api.state}`}>{api.state === "online" ? "ONLINE" : api.state === "offline" ? "OFFLINE" : "CHECKING"}</span></div>
                 <div className="service-row"><span className="service-icon database">▤</span><div><b>PostgreSQL</b><small>Schema setup is next</small></div><span className="service-status planned">PLANNED</span></div>
                 <div className="service-row"><span className="service-icon redis">⇄</span><div><b>Redis queue</b><small>Priority processing planned</small></div><span className="service-status planned">PLANNED</span></div>
               </div>
