@@ -23,6 +23,8 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+app.use("/api/claims", claimsRouter);
+
 app.use("/api", (_req, res) => {
   res.status(404).json({
     error: {
@@ -33,6 +35,9 @@ app.use("/api", (_req, res) => {
 });
 
 app.use((err, _req, res, _next) => {
+  if (err?.code === "P2021" || err?.code === "P2022") {
+    return res.status(503).json({ error: { code: "DATABASE_NOT_READY", message: "The database schema is not ready. Run the Prisma migration first." } });
+  }
   console.error("Unhandled API error:", err);
   res.status(500).json({
     error: {
