@@ -38,6 +38,13 @@ enum ClaimPriority {
   CRITICAL
 }
 
+enum NotificationKind {
+  SLA_AT_RISK
+  SLA_BREACHED
+  CLAIM_ASSIGNED
+  STATUS_CHANGED
+}
+
 enum AssignmentStatus {
   ACTIVE
   COMPLETED
@@ -56,6 +63,7 @@ model User {
   assignments  ClaimAssignment[]
   history      ClaimHistory[]   @relation("HistoryActor")
   createdAssignments ClaimAssignment[] @relation("AssignmentCreator")
+  notifications Notification[]
 
   @@index([role, isActive])
 }
@@ -81,6 +89,7 @@ model Claim {
   updatedAt        DateTime          @updatedAt
   assignments      ClaimAssignment[]
   history          ClaimHistory[]
+  notifications     Notification[]
 
   @@index([status, priorityScore(sort: Desc)])
   @@index([slaDeadline, status])
@@ -118,4 +127,20 @@ model ClaimHistory {
 
   @@index([claimId, createdAt])
   @@index([actorId, createdAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  claimId   String?
+  kind      NotificationKind
+  title     String
+  message   String           @db.Text
+  createdAt DateTime         @default(now())
+  readAt    DateTime?
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  claim     Claim?           @relation(fields: [claimId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, claimId, kind])
+  @@index([userId, readAt, createdAt])
 }
