@@ -32,6 +32,16 @@ export default function App() {
   const [activeNav, setActiveNav] = useState("Overview");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
+  const [token, setToken] = useState(() => window.sessionStorage.getItem("claimsync_token") || "");
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [claims, setClaims] = useState([]);
+  const [claimsLoading, setClaimsLoading] = useState(false);
+  const [claimFormOpen, setClaimFormOpen] = useState(false);
+  const [claimError, setClaimError] = useState("");
+  const [claimForm, setClaimForm] = useState({ claimantName: "", claimantEmail: "", policyNumber: "", type: "AUTO", description: "", estimatedAmount: "", urgency: 3, businessImpact: 3, slaDeadline: "" });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -55,7 +65,7 @@ export default function App() {
     };
   }, []);
 
-  const filteredNav = useMemo(() => {
+  useEffect(() => {\n    if (!token) return;\n    let cancelled = false;\n    setClaimsLoading(true);\n    Promise.all([\n      fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),\n      fetch(`${API_URL}/api/claims?page=1&pageSize=100`, { headers: { Authorization: `Bearer ${token}` } })\n    ]).then(async ([userResponse, claimsResponse]) => {\n      if (userResponse.status === 401 || claimsResponse.status === 401) throw new Error("Your session expired. Please sign in again.");\n      if (!userResponse.ok || !claimsResponse.ok) throw new Error("Could not load the workspace. Check that the database is migrated.");\n      const userBody = await userResponse.json();\n      const claimsBody = await claimsResponse.json();\n      if (!cancelled) { setCurrentUser(userBody.data.user); setClaims(claimsBody.data || []); }\n    }).catch((error) => {\n      if (!cancelled) { setNotice(error.message); if (error.message.includes("session expired")) { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); } }\n    }).finally(() => { if (!cancelled) setClaimsLoading(false); });\n    return () => { cancelled = true; };\n  }, [token]);\n\n  const signIn = async (event) => {\n    event.preventDefault(); setLoginError("");\n    try {\n      const response = await fetch(`${API_URL}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: loginEmail, password: loginPassword }) });\n      const body = await response.json();\n      if (!response.ok) throw new Error(body.error?.message || "Unable to sign in.");\n      window.sessionStorage.setItem("claimsync_token", body.data.token); setCurrentUser(body.data.user); setToken(body.data.token); setLoginPassword("");\n    } catch (error) { setLoginError(error.message || "Unable to connect to CLAIMSYNC API."); }\n  };\n\n  const signOut = () => { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); setClaims([]); setNotice(""); };\n\n  const submitClaim = async (event) => {\n    event.preventDefault(); setClaimError("");\n    try {\n      const response = await fetch(`${API_URL}/api/claims`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ...claimForm, estimatedAmount: Number(claimForm.estimatedAmount), urgency: Number(claimForm.urgency), businessImpact: Number(claimForm.businessImpact), slaDeadline: new Date(claimForm.slaDeadline).toISOString() }) });\n      const body = await response.json();\n      if (!response.ok) throw new Error(body.error?.message || "Could not submit claim.");\n      setClaims((previous) => [body.data, ...previous].sort((a, b) => b.priorityScore - a.priorityScore));\n      setClaimFormOpen(false); setClaimForm({ claimantName: "", claimantEmail: "", policyNumber: "", type: "AUTO", description: "", estimatedAmount: "", urgency: 3, businessImpact: 3, slaDeadline: "" }); setNotice(`Claim ${body.data.claimNumber} submitted successfully.`);\n    } catch (error) { setClaimError(error.message || "Could not submit claim."); }\n  };\n\n  const changeClaimStatus = async (claim, status) => {\n    try { const response = await fetch(`${API_URL}/api/claims/${claim.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }); const body = await response.json(); if (!response.ok) throw new Error(body.error?.message || "Status update failed."); setClaims((items) => items.map((item) => item.id === claim.id ? { ...item, ...body.data } : item)); setNotice(`${claim.claimNumber} moved to ${status.replaceAll("_", " ").toLowerCase()}.`); } catch (error) { setNotice(error.message); }\n  };\n\n  const filteredNav = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return navGroups;
     return navGroups.map((group) => ({
@@ -114,7 +124,7 @@ export default function App() {
           <div><strong>API connection</strong><small>{api.message}</small></div>
           <span className={`connection-state ${api.state}`}>{api.state === "checking" ? "…" : api.state === "online" ? "●" : "○"}</span>
         </div>
-        <div className="sidebar-user"><div className="user-avatar">CT</div><div><strong>Claims team</strong><small>Local development</small></div><span className="user-menu">•••</span></div>
+        <div className="sidebar-user"><div className="user-avatar">{(currentUser?.name || "CT").slice(0,2).toUpperCase()}</div><div><strong>{currentUser?.name || "Claims team"}</strong><small>{currentUser?.role || "Local development"}</small></div><button className="signout-mini" type="button" onClick={signOut}>↪</button></div>
       </aside>
 
       <main className="main-content" id="overview">
@@ -124,7 +134,7 @@ export default function App() {
           <div className="topbar-tools">
             <label className="search-field"><Glyph>⌕</Glyph><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a workspace section…" aria-label="Filter workspace navigation" /><kbd>⌘ K</kbd></label>
             <button className="notification-button" type="button" aria-label="Notifications" onClick={() => setNotice("Notifications will appear here when claim events are connected.")}>♧<span className="notification-dot" /></button>
-            <div className="user-chip"><div className="user-avatar">CT</div><div><strong>Claims Team</strong><small>Administrator preview</small></div><span className="switcher-arrow">⌄</span></div>
+            <div className="user-chip"><div className="user-avatar">{(currentUser?.name || "CT").slice(0,2).toUpperCase()}</div><div><strong>{currentUser?.name || "Claims Team"}</strong><small>{currentUser?.role || "Team member"}</small></div><button className="signout-button" type="button" onClick={signOut}>Sign out</button></div>
           </div>
         </header>
 
@@ -139,7 +149,7 @@ export default function App() {
             </div>
             <div className="welcome-controls">
               <div className="date-chip"><Glyph>◷</Glyph>{new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</div>
-              <button className="new-claim-button" type="button" disabled title="Claim intake is part of the next milestone">＋ New claim</button>
+              <button className="new-claim-button" type="button" onClick={() => setClaimFormOpen(true)}>＋ New claim</button>
             </div>
           </section>
 
@@ -169,7 +179,7 @@ export default function App() {
             {metrics.map((metric, index) => (
               <article className="metric-card" key={metric.label} style={{ "--stagger": index }}>
                 <div className="metric-top"><span>{metric.label}</span><span className={`metric-icon ${metric.tone}`}><Glyph>{metric.icon}</Glyph></span></div>
-                <div className="metric-value">{metric.value}</div>
+                <div className="metric-value">{metric.label === "Total claims" ? claims.length : metric.label === "Awaiting review" ? claims.filter((claim) => ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"].includes(claim.status)).length : metric.label === "SLA at risk" ? claims.filter((claim) => !["APPROVED", "REJECTED", "CLOSED"].includes(claim.status) && new Date(claim.slaDeadline).getTime() < Date.now() + 24 * 3600000).length : claims.filter((claim) => claim.status === "CLOSED" && claim.resolvedAt && new Date(claim.resolvedAt).toDateString() === new Date().toDateString()).length}</div>
                 <div className="metric-footer"><span>{metric.detail}</span><span className={`mini-chart chart-${metric.tone}`} aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></span></div>
               </article>
             ))}
@@ -191,14 +201,14 @@ export default function App() {
               <div className="service-list">
                 <div className="service-row"><span className="service-icon frontend">◈</span><div><b>Web application</b><small>React + Vite</small></div><span className="service-status ready">READY</span></div>
                 <div className="service-row"><span className="service-icon backend">⌘</span><div><b>REST API</b><small>{api.message}</small></div><span className={`service-status ${api.state}`}>{api.state === "online" ? "ONLINE" : api.state === "offline" ? "OFFLINE" : "CHECKING"}</span></div>
-                <div className="service-row"><span className="service-icon database">▤</span><div><b>PostgreSQL</b><small>Schema setup is next</small></div><span className="service-status planned">PLANNED</span></div>
+                <div className="service-row"><span className="service-icon database">▤</span><div><b>PostgreSQL</b><small>Claim records and audit history</small></div><span className="service-status ready">CONNECTED</span></div>
                 <div className="service-row"><span className="service-icon redis">⇄</span><div><b>Redis queue</b><small>Priority processing planned</small></div><span className="service-status planned">PLANNED</span></div>
               </div>
               <div className="health-footer"><span />Small milestones. Verified progress.</div>
             </article>
           </section>
 
-          <section className="closing-note"><span className="closing-icon">✳</span><div><b>Clarity first. Real data always.</b><p>These metrics are intentionally placeholders until the claims database is connected.</p></div><span className="version-tag">MVP <b>0.1.0</b></span></section>
+          <section className="closing-note"><span className="closing-icon">✳</span><div><b>Clarity first. Real data always.</b><p>Metrics and queue rows are loaded from the authenticated claims API.</p></div><span className="version-tag">MVP <b>0.1.0</b></span></section>
           <footer className="page-footer"><span><b>CLAIMSYNC</b><i>/</i> Claims operations</span><span>Built for reliable, explainable claims handling.</span></footer>
         </div>
       </main>
