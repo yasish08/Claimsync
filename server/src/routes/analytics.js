@@ -13,7 +13,7 @@ router.get("/overview", async (_req, res, next) => {
     const [total, open, resolvedToday, atRisk, statusGroups, typeGroups, recentClaims] = await prisma.$transaction([
       prisma.claim.count(),
       prisma.claim.count({ where: { status: { in: openStatuses } } }),
-      prisma.claim.count({ where: { status: "CLOSED", resolvedAt: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) } } }),
+      prisma.claim.count({ where: { status: { in: ["APPROVED", "REJECTED", "CLOSED"] }, resolvedAt: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) } } }),
       prisma.claim.count({ where: { status: { in: openStatuses }, slaDeadline: { lte: riskWindow } } }),
       prisma.claim.groupBy({ by: ["status"], _count: { _all: true } }),
       prisma.claim.groupBy({ by: ["type"], _count: { _all: true } }),
