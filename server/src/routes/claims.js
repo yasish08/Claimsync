@@ -87,11 +87,12 @@ router.post("/", async (req, res, next) => {
     if (Object.keys(errors).length) return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Correct the claim details.", fields: errors } });
     const { score, priority } = calculatePriority({ urgency, businessImpact, slaDeadline: deadline });
     const data = await prisma.claim.create({ data: {
-      claimNumber: \`CLM-\${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-\${randomUUID().slice(0, 8).toUpperCase()}\`,
+      claimNumber: `CLM-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${randomUUID().slice(0, 8).toUpperCase()}`,
       claimantName: claimantName.trim(), claimantEmail: claimantEmail.trim().toLowerCase(), policyNumber: policyNumber.trim(),
       type, description: description.trim(), estimatedAmount: amount, urgency, businessImpact, priorityScore: score, priority, slaDeadline: deadline,
       history: { create: { action: "CLAIM_SUBMITTED", toStatus: "SUBMITTED", actorId: req.user.id, note: "Submitted through intake API." } }
     } });
+    try { await enqueueClaim(data); } catch (queueError) { console.warn("Claim saved but Redis enqueue failed:", queueError.message); }
     res.status(201).json({ data });
   } catch (error) { next(error); }
 });
@@ -111,7 +112,8 @@ router.patch("/:id/status", async (req, res, next) => {
       return { data };
     });
     if (result.kind === "missing") return res.status(404).json({ error: { code: "CLAIM_NOT_FOUND", message: "Claim not found." } });
-    if (result.kind === "invalid") return res.status(409).json({ error: { code: "INVALID_TRANSITION", message: \`Cannot move claim from \${result.status} to \${nextStatus}.\` } });
+    if (result.kind === "invalid") return res.status(409).json({ error: { code: "INVALID_TRANSITION", message: `Cannot move claim from ${result.status} to ${nextStatus}.` } });
+    try { if (["APPROVED", "REJECTED", "CLOSED"].includes(nextStatus)) await removeClaimFromQueue(result.data.id); else await enqueueClaim(result.data); } catch (queueError) { console.warn("Claim status saved but Redis sync failed:", queueError.message); }
     res.json({ data: result.data });
   } catch (error) { next(error); }
 });
@@ -129,7 +131,7 @@ router.post("/:id/assign", requireRole("ADMIN", "MANAGER"), async (req, res, nex
       if (!agent || !agent.isActive || !["AGENT", "MANAGER"].includes(agent.role)) return { kind: "agent-invalid" };
       await tx.claimAssignment.updateMany({ where: { claimId: claim.id, status: "ACTIVE" }, data: { status: "REASSIGNED", completedAt: new Date() } });
       const assignment = await tx.claimAssignment.create({ data: { claimId: claim.id, agentId: agent.id, assignedBy: req.user.id } });
-      await tx.claimHistory.create({ data: { claimId: claim.id, actorId: req.user.id, action: "CLAIM_ASSIGNED", note: \`Assigned to \${agent.name}.\`, metadata: { agentId: agent.id } } });
+      await tx.claimHistory.create({ data: { claimId: claim.id, actorId: req.user.id, action: "CLAIM_ASSIGNED", note: `Assigned to ${agent.name}.`, metadata: { agentId: agent.id } } });
       return { assignment };
     });
     if (result.kind === "claim-missing") return res.status(404).json({ error: { code: "CLAIM_NOT_FOUND", message: "Claim not found." } });
