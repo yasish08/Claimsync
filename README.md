@@ -1,84 +1,62 @@
 # CLAIMSYNC — Intelligent Insurance Claims Processing
 
-An MVP insurance claims workflow platform for claim intake, validation, priority scoring, agent assignment, SLA monitoring, audit history, and analytics.
+CLAIMSYNC is a full-stack MVP for insurance claim intake, priority scoring, claim lifecycle management, agent assignment, audit history, and SLA monitoring.
 
-> **Status:** Initial project setup. Roadmap features are planned until implemented and tested.
+## Implemented foundation
 
-## Planned stack
-- Frontend: React + Vite + JavaScript + CSS/Tailwind
-- Backend: Node.js + Express.js
-- Database: PostgreSQL + Prisma ORM
-- Queue: Redis
-- Security: JWT, bcrypt, and server-side role-based access (admin, manager, agent)
-- Quality: unit and API integration tests
+- React + Vite responsive dashboard.
+- Express API with a health endpoint and consistent JSON errors.
+- PostgreSQL data model via Prisma: users, claims, assignments, and claim history.
+- JWT login, password hashing with bcrypt, authenticated sessions, and role middleware.
+- Admin-managed user creation; safe first-admin bootstrap refuses to run if an admin already exists.
+- Authenticated claim listing, filtering, pagination, detail view, validated claim intake, priority scoring, status transitions, assignment, and audit events.
+- Initial tests for API health/404 behavior and role authorization.
 
-## Core workflow
-1. Authenticate a user with an assigned role.
-2. Submit and validate a claim.
-3. Calculate priority from documented urgency, deadline risk, and business impact.
-4. Assign eligible claims to agents and sort queues.
-5. Track claim status, history, and SLA deadlines.
-6. Notify users about assignments and deadline risks.
-7. View workload and outcome analytics.
+## Stack
 
-## Run locally
-
-Requirements: Node.js 20 or newer and npm.
-
-```bash
-npm install
-cp .env.example .env
-npm run dev
-```
-
-The web app runs at `http://localhost:5173` and the API at `http://localhost:4000`. The API health endpoint is `http://localhost:4000/api/health`. The initial dashboard deliberately shows placeholder metrics until the database-backed claims workflow is implemented. PostgreSQL and Redis are not wired up in this first foundation commit.
-
-To run the API tests:
-
-```bash
-npm test --workspace @claimsync/server
-```
-
-To create a production frontend build:
-
-```bash
-npm run build
-```
+- Frontend: React, JavaScript, Vite, CSS
+- Backend: Node.js, Express
+- Database: PostgreSQL, Prisma
+- Auth: JWT, bcrypt
+- Planned next: Redis priority queue, background SLA jobs, notifications, analytics, deployment
 
 ## Run locally
 
-Requirements: Node.js 20+, npm, and a local PostgreSQL database.
+Requirements: Node.js 20+, npm, and PostgreSQL.
 
 1. Install dependencies: `npm install`
-2. Copy `.env.example` to `.env` and set `DATABASE_URL` to your local PostgreSQL database.
-3. Generate the Prisma client: `npm run db:generate`
-4. Create the schema in the configured database: `npm run db:migrate`
-5. Start frontend and API: `npm run dev`
+2. Copy `.env.example` to `.env`.
+3. Set `DATABASE_URL` to a local PostgreSQL database and replace the JWT and bootstrap-password placeholders with unique secrets.
+4. Generate Prisma Client: `npm run db:generate`
+5. Apply the development migration: `npm run db:migrate`
+6. Create the initial admin once: `npm run db:seed`
+7. Start frontend and API: `npm run dev`
 
-The frontend is available at `http://localhost:5173`; the API defaults to `http://localhost:4000`. The health endpoint is `/api/health`. Claims API endpoints are `GET /api/claims`, `GET /api/claims/:id`, and `POST /api/claims`. Claim intake currently validates fields, assigns an explainable initial priority score, and writes an initial history event. Authentication and authorization are still to be added; do not expose this API publicly with real data until those controls are implemented.
+Frontend: `http://localhost:5173`. API: `http://localhost:4000`. Health: `GET /api/health`.
 
-Run API tests with `npm test`, and build the frontend with `npm run build`. These commands should be run locally after dependency installation; a successful GitHub commit does not itself mean runtime tests have passed.
+## API outline
 
-## Architecture decision
-Start with one modular Express application rather than separate microservices. PostgreSQL is the source of truth; Redis is a recoverable queue/index.
+- `POST /api/auth/login` — exchange email/password for a short-lived JWT.
+- `GET /api/auth/me` — current authenticated user.
+- `GET /api/users` — list users (admin/manager).
+- `POST /api/users` — create a user (admin only).
+- `GET /api/claims?page=1&pageSize=20&status=SUBMITTED&type=AUTO` — authenticated, paginated claim queue.
+- `GET /api/claims/:id` — claim detail, assignments, and history.
+- `POST /api/claims` — validate and submit a claim.
+- `PATCH /api/claims/:id/status` — transition a claim and append history; approval/rejection requires manager/admin.
+- `POST /api/claims/:id/assign` — assign to an active agent/manager (admin/manager).
 
-## Planned structure
-```text
-Claimsync/
-├── client/                 # React + Vite
-├── server/                 # Express API and Prisma schema
-├── docs/                   # Roadmap and architecture notes
-├── .env.example
-└── README.md
-```
+Protected endpoints require `Authorization: Bearer <token>`. No public registration endpoint is exposed. The bootstrap script refuses to create another administrator once one exists.
 
-## Development guardrails
-- Enforce permissions in the API, not only in the UI.
-- Validate claim inputs and allowed state transitions server-side.
-- Audit status and assignment changes.
-- Handle SLA timezones deliberately and make background jobs retry-safe.
-- Use synthetic data in demos.
-- Priority weights are product decisions to evaluate, not an industry-standard formula.
-- Publish performance results only after reproducible measurements.
+## Tests and build
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+```bash
+npm test
+npm run build
+``
+
+These commands must be run after dependency installation. A GitHub commit is not evidence that runtime tests or database migrations passed; verify them locally before using real data.
+
+## Scope and safety
+
+This is an MVP, not a production-certified insurance system. Use synthetic data while developing. Do not commit real customer details or secrets. Authentication is implemented, but production deployment still requires review of rate limiting, security headers, operational logging, backups, and privacy requirements.
