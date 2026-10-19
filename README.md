@@ -18,7 +18,10 @@ CLAIMSYNC is a full-stack MVP for insurance claim intake, priority scoring, clai
 - Backend: Node.js, Express
 - Database: PostgreSQL, Prisma
 - Auth: JWT, bcrypt
-- Planned next: Redis priority queue, background SLA jobs, notifications, analytics, deployment
+- Redis sorted-set priority queue with database fallback
+- Periodic SLA risk/breach monitor and per-user notifications
+- Claim analytics overview and agent workload endpoints
+- Remaining: end-to-end deployment, deeper integration testing, UI polish, and production hardening
 
 ## Run locally
 
@@ -30,7 +33,7 @@ Requirements: Node.js 20+, npm, and PostgreSQL.
 4. Generate Prisma Client: `npm run db:generate`
 5. Apply the development migration: `npm run db:migrate`
 6. Create the initial admin once: `npm run db:seed`
-7. Start frontend and API: `npm run dev`
+7. Start frontend and API: `npm run dev` (the SLA monitor starts with the API by default; set `ENABLE_SLA_MONITOR=false` to disable it).
 
 Frontend: `http://localhost:5173`. API: `http://localhost:4000`. Health: `GET /api/health`.
 
@@ -44,6 +47,9 @@ Frontend: `http://localhost:5173`. API: `http://localhost:4000`. Health: `GET /a
 - `GET /api/claims/priority-queue` — Redis-backed priority order with a database fallback.
 - `GET /api/analytics/overview` — authenticated claim counts, status/type breakdowns, and highest-priority claims.
 - `GET /api/analytics/agents` — manager/admin agent workload overview.
+- `GET /api/notifications?unread=true` — current user’s notifications.
+- `PATCH /api/notifications/:id/read` — mark one notification read.
+- `PATCH /api/notifications/read-all` — mark all current-user notifications read.
 - `GET /api/claims/:id` — claim detail, assignments, and history.
 - `POST /api/claims` — validate and submit a claim.
 - `PATCH /api/claims/:id/status` — transition a claim and append history; approval/rejection requires manager/admin.
