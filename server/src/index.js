@@ -3,6 +3,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import express from "express";
 import cors from "cors";
 import claimsRouter from "./routes/claims.js";
+import authRouter from "./routes/auth.js";
+import usersRouter from "./routes/users.js";
 
 dotenv.config({ path: fileURLToPath(new URL("../../.env", import.meta.url)) });
 
@@ -25,6 +27,10 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/claims", claimsRouter);
 
+app.use("/api/auth", authRouter);
+app.use("/api/users", usersRouter);
+app.use("/api/claims", claimsRouter);
+
 app.use("/api", (_req, res) => {
   res.status(404).json({
     error: {
@@ -38,6 +44,8 @@ app.use((err, _req, res, _next) => {
   if (err?.code === "P2021" || err?.code === "P2022") {
     return res.status(503).json({ error: { code: "DATABASE_NOT_READY", message: "The database schema is not ready. Run the Prisma migration first." } });
   }
+  if (err?.code === "P2021" || err?.code === "P2022") return res.status(503).json({ error: { code: "DATABASE_NOT_READY", message: "The database schema is not ready. Run the Prisma migration first." } });
+  if (err?.code === "P2002") return res.status(409).json({ error: { code: "DUPLICATE_RECORD", message: "A record with this unique value already exists." } });
   console.error("Unhandled API error:", err);
   res.status(500).json({
     error: {
