@@ -55,6 +55,7 @@ model User {
   updatedAt    DateTime         @updatedAt
   assignments  ClaimAssignment[]
   history      ClaimHistory[]   @relation("HistoryActor")
+  createdAssignments ClaimAssignment[] @relation("AssignmentCreator")
 
   @@index([role, isActive])
 }
@@ -97,6 +98,7 @@ model ClaimAssignment {
   completedAt DateTime?
   claim       Claim            @relation(fields: [claimId], references: [id], onDelete: Cascade)
   agent       User             @relation(fields: [agentId], references: [id])
+  assigner    User?            @relation("AssignmentCreator", fields: [assignedBy], references: [id], onDelete: SetNull)
   @@index([agentId, status])
   @@index([claimId, status])
 }
