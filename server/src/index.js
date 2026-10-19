@@ -5,6 +5,7 @@ import cors from "cors";
 import claimsRouter from "./routes/claims.js";
 import authRouter from "./routes/auth.js";
 import usersRouter from "./routes/users.js";
+import analyticsRouter from "./routes/analytics.js";
 
 dotenv.config({ path: fileURLToPath(new URL("../../.env", import.meta.url)) });
 
@@ -27,6 +28,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/users", usersRouter);
+app.use("/api/analytics", analyticsRouter);
 app.use("/api/claims", claimsRouter);
 
 app.use("/api", (_req, res) => {
