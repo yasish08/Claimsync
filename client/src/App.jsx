@@ -65,7 +65,53 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {\n    if (!token) return;\n    let cancelled = false;\n    setClaimsLoading(true);\n    Promise.all([\n      fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),\n      fetch(`${API_URL}/api/claims?page=1&pageSize=100`, { headers: { Authorization: `Bearer ${token}` } })\n    ]).then(async ([userResponse, claimsResponse]) => {\n      if (userResponse.status === 401 || claimsResponse.status === 401) throw new Error("Your session expired. Please sign in again.");\n      if (!userResponse.ok || !claimsResponse.ok) throw new Error("Could not load the workspace. Check that the database is migrated.");\n      const userBody = await userResponse.json();\n      const claimsBody = await claimsResponse.json();\n      if (!cancelled) { setCurrentUser(userBody.data.user); setClaims(claimsBody.data || []); }\n    }).catch((error) => {\n      if (!cancelled) { setNotice(error.message); if (error.message.includes("session expired")) { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); } }\n    }).finally(() => { if (!cancelled) setClaimsLoading(false); });\n    return () => { cancelled = true; };\n  }, [token]);\n\n  const signIn = async (event) => {\n    event.preventDefault(); setLoginError("");\n    try {\n      const response = await fetch(`${API_URL}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: loginEmail, password: loginPassword }) });\n      const body = await response.json();\n      if (!response.ok) throw new Error(body.error?.message || "Unable to sign in.");\n      window.sessionStorage.setItem("claimsync_token", body.data.token); setCurrentUser(body.data.user); setToken(body.data.token); setLoginPassword("");\n    } catch (error) { setLoginError(error.message || "Unable to connect to CLAIMSYNC API."); }\n  };\n\n  const signOut = () => { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); setClaims([]); setNotice(""); };\n\n  const submitClaim = async (event) => {\n    event.preventDefault(); setClaimError("");\n    try {\n      const response = await fetch(`${API_URL}/api/claims`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ...claimForm, estimatedAmount: Number(claimForm.estimatedAmount), urgency: Number(claimForm.urgency), businessImpact: Number(claimForm.businessImpact), slaDeadline: new Date(claimForm.slaDeadline).toISOString() }) });\n      const body = await response.json();\n      if (!response.ok) throw new Error(body.error?.message || "Could not submit claim.");\n      setClaims((previous) => [body.data, ...previous].sort((a, b) => b.priorityScore - a.priorityScore));\n      setClaimFormOpen(false); setClaimForm({ claimantName: "", claimantEmail: "", policyNumber: "", type: "AUTO", description: "", estimatedAmount: "", urgency: 3, businessImpact: 3, slaDeadline: "" }); setNotice(`Claim ${body.data.claimNumber} submitted successfully.`);\n    } catch (error) { setClaimError(error.message || "Could not submit claim."); }\n  };\n\n  const changeClaimStatus = async (claim, status) => {\n    try { const response = await fetch(`${API_URL}/api/claims/${claim.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }); const body = await response.json(); if (!response.ok) throw new Error(body.error?.message || "Status update failed."); setClaims((items) => items.map((item) => item.id === claim.id ? { ...item, ...body.data } : item)); setNotice(`${claim.claimNumber} moved to ${status.replaceAll("_", " ").toLowerCase()}.`); } catch (error) { setNotice(error.message); }\n  };\n\n  const filteredNav = useMemo(() => {
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    setClaimsLoading(true);
+    Promise.all([
+      fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/api/claims?page=1&pageSize=100`, { headers: { Authorization: `Bearer ${token}` } })
+    ]).then(async ([userResponse, claimsResponse]) => {
+      if (userResponse.status === 401 || claimsResponse.status === 401) throw new Error("Your session expired. Please sign in again.");
+      if (!userResponse.ok || !claimsResponse.ok) throw new Error("Could not load the workspace. Check that the database is migrated.");
+      const userBody = await userResponse.json();
+      const claimsBody = await claimsResponse.json();
+      if (!cancelled) { setCurrentUser(userBody.data.user); setClaims(claimsBody.data || []); }
+    }).catch((error) => {
+      if (!cancelled) { setNotice(error.message); if (error.message.includes("session expired")) { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); } }
+    }).finally(() => { if (!cancelled) setClaimsLoading(false); });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const signIn = async (event) => {
+    event.preventDefault(); setLoginError("");
+    try {
+      const response = await fetch(`${API_URL}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: loginEmail, password: loginPassword }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message || "Unable to sign in.");
+      window.sessionStorage.setItem("claimsync_token", body.data.token); setCurrentUser(body.data.user); setToken(body.data.token); setLoginPassword("");
+    } catch (error) { setLoginError(error.message || "Unable to connect to CLAIMSYNC API."); }
+  };
+
+  const signOut = () => { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); setClaims([]); setNotice(""); };
+
+  const submitClaim = async (event) => {
+    event.preventDefault(); setClaimError("");
+    try {
+      const response = await fetch(`${API_URL}/api/claims`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ...claimForm, estimatedAmount: Number(claimForm.estimatedAmount), urgency: Number(claimForm.urgency), businessImpact: Number(claimForm.businessImpact), slaDeadline: new Date(claimForm.slaDeadline).toISOString() }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message || "Could not submit claim.");
+      setClaims((previous) => [body.data, ...previous].sort((a, b) => b.priorityScore - a.priorityScore));
+      setClaimFormOpen(false); setClaimForm({ claimantName: "", claimantEmail: "", policyNumber: "", type: "AUTO", description: "", estimatedAmount: "", urgency: 3, businessImpact: 3, slaDeadline: "" }); setNotice(`Claim ${body.data.claimNumber} submitted successfully.`);
+    } catch (error) { setClaimError(error.message || "Could not submit claim."); }
+  };
+
+  const changeClaimStatus = async (claim, status) => {
+    try { const response = await fetch(`${API_URL}/api/claims/${claim.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }); const body = await response.json(); if (!response.ok) throw new Error(body.error?.message || "Status update failed."); setClaims((items) => items.map((item) => item.id === claim.id ? { ...item, ...body.data } : item)); setNotice(`${claim.claimNumber} moved to ${status.replaceAll("_", " ").toLowerCase()}.`); } catch (error) { setNotice(error.message); }
+  };
+
+  const filteredNav = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return navGroups;
     return navGroups.map((group) => ({
