@@ -6,6 +6,8 @@ import claimsRouter from "./routes/claims.js";
 import authRouter from "./routes/auth.js";
 import usersRouter from "./routes/users.js";
 import analyticsRouter from "./routes/analytics.js";
+import notificationsRouter from "./routes/notifications.js";
+import { startSlaMonitor } from "./jobs/sla-monitor.js";
 
 dotenv.config({ path: fileURLToPath(new URL("../../.env", import.meta.url)) });
 
@@ -29,6 +31,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/analytics", analyticsRouter);
+app.use("/api/notifications", notificationsRouter);
 app.use("/api/claims", claimsRouter);
 
 app.use("/api", (_req, res) => {
@@ -56,6 +59,7 @@ app.use((err, _req, res, _next) => {
 
 const isEntrypoint = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isEntrypoint) {
+  if (process.env.ENABLE_SLA_MONITOR !== "false") startSlaMonitor();
   app.listen(port, () => {
     console.log(`CLAIMSYNC API listening on http://localhost:${port}`);
   });
