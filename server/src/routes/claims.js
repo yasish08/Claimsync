@@ -2,6 +2,7 @@ import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { enqueueClaim, removeClaimFromQueue, withRedis } from "../redis.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -36,6 +37,24 @@ router.get("/", async (req, res, next) => {
       prisma.claim.count({ where })
     ]);
     res.json({ data, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } });
+  } catch (error) { next(error); }
+});
+
+router.get("/priority-queue", async (_req, res, next) => {
+  try {
+    try {
+      const ids = await withRedis((redis) => redis.zrevrange("claimsync:priority-queue", 0, 49));
+      if (ids.length) {
+        const records = await prisma.claim.findMany({ where: { id: { in: ids }, status: { in: ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"] } } });
+        const byId = new Map(records.map((claim) => [claim.id, claim]));
+        return res.json({ data: ids.map((id) => byId.get(id)).filter(Boolean), source: "redis", count: records.length });
+      }
+      const records = await prisma.claim.findMany({ where: { status: { in: ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"] } }, orderBy: [{ priorityScore: "desc" }, { submittedAt: "asc" }], take: 50 });
+      return res.json({ data: records, source: "database-fallback", count: records.length });
+    } catch {
+      const records = await prisma.claim.findMany({ where: { status: { in: ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"] } }, orderBy: [{ priorityScore: "desc" }, { submittedAt: "asc" }], take: 50 });
+      return res.json({ data: records, source: "database-fallback", count: records.length });
+    }
   } catch (error) { next(error); }
 });
 
