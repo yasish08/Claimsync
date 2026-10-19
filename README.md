@@ -41,6 +41,9 @@ Frontend: `http://localhost:5173`. API: `http://localhost:4000`. Health: `GET /a
 - `GET /api/users` — list users (admin/manager).
 - `POST /api/users` — create a user (admin only).
 - `GET /api/claims?page=1&pageSize=20&status=SUBMITTED&type=AUTO` — authenticated, paginated claim queue.
+- `GET /api/claims/priority-queue` — Redis-backed priority order with a database fallback.
+- `GET /api/analytics/overview` — authenticated claim counts, status/type breakdowns, and highest-priority claims.
+- `GET /api/analytics/agents` — manager/admin agent workload overview.
 - `GET /api/claims/:id` — claim detail, assignments, and history.
 - `POST /api/claims` — validate and submit a claim.
 - `PATCH /api/claims/:id/status` — transition a claim and append history; approval/rejection requires manager/admin.
