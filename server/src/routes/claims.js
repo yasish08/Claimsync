@@ -45,9 +45,15 @@ router.get("/priority-queue", async (_req, res, next) => {
     try {
       const ids = await withRedis((redis) => redis.zrevrange("claimsync:priority-queue", 0, 49));
       if (ids.length) {
-        const records = await prisma.claim.findMany({ where: { id: { in: ids }, status: { in: ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"] } } });
-        const byId = new Map(records.map((claim) => [claim.id, claim]));
-        return res.json({ data: ids.map((id) => byId.get(id)).filter(Boolean), source: "redis", count: records.length });
+        const activeWhere = { status: { in: ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"] } };
+        const [queuedRecords, databaseTop] = await Promise.all([
+          prisma.claim.findMany({ where: { id: { in: ids }, ...activeWhere } }),
+          prisma.claim.findMany({ where: activeWhere, orderBy: [{ priorityScore: "desc" }, { submittedAt: "asc" }], take: 50 })
+        ]);
+        const byId = new Map([...queuedRecords, ...databaseTop].map((claim) => [claim.id, claim]));
+        const orderedIds = [...ids.filter((id) => byId.has(id)), ...databaseTop.map((claim) => claim.id).filter((id) => !ids.includes(id))];
+        const data = orderedIds.slice(0, 50).map((id) => byId.get(id));
+        return res.json({ data, source: "redis+database-reconciled", count: data.length });
       }
       const records = await prisma.claim.findMany({ where: { status: { in: ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"] } }, orderBy: [{ priorityScore: "desc" }, { submittedAt: "asc" }], take: 50 });
       return res.json({ data: records, source: "database-fallback", count: records.length });
