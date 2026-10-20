@@ -19,7 +19,7 @@ CLAIMSYNC is a full-stack MVP for insurance claim intake, priority scoring, clai
 - Database: PostgreSQL, Prisma
 - Auth: JWT, bcrypt
 - Redis sorted-set priority queue with database fallback
-- Periodic SLA risk/breach monitor and per-user notifications
+- Periodic SLA risk/breach monitor and per-user notifications for SLA risk, assignment, and status changes
 - Claim analytics overview and agent workload endpoints
 - Remaining: end-to-end deployment, deeper integration testing, UI polish, and production hardening
 
@@ -47,7 +47,7 @@ Frontend: `http://localhost:5173`. API: `http://localhost:4000`. Health: `GET /a
 - `GET /api/claims/priority-queue` — Redis-backed priority order with a database fallback.
 - `GET /api/analytics/overview` — authenticated claim counts, status/type breakdowns, and highest-priority claims.
 - `GET /api/analytics/agents` — manager/admin agent workload overview.
-- `GET /api/notifications?unread=true` — current user’s notifications.
+- `GET /api/notifications?unread=true` — current user’s notifications, including SLA risk/breach, assignment, and status updates.
 - `PATCH /api/notifications/:id/read` — mark one notification read.
 - `PATCH /api/notifications/read-all` — mark all current-user notifications read.
 - `GET /api/claims/:id` — claim detail, assignments, and history.
