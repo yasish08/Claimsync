@@ -1,10 +1,11 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../db.js";
-import { requireRole } from "../middleware/auth.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = Router();
 const roles = new Set(["ADMIN", "MANAGER", "AGENT"]);
+router.use(requireAuth);
 
 router.get("/", requireRole("ADMIN", "MANAGER"), async (_req, res, next) => {
   try {
