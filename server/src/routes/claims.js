@@ -15,6 +15,29 @@ const transitions = {
   APPROVED: ["CLOSED"], REJECTED: ["CLOSED"], CLOSED: []
 };
 
+async function notifyClaimStakeholders(claimId, kind, title, message) {
+  const claim = await prisma.claim.findUnique({
+    where: { id: claimId },
+    include: { assignments: { where: { status: "ACTIVE" }, select: { agentId: true } } }
+  });
+  if (!claim) return;
+  let userIds = claim.assignments.map((assignment) => assignment.agentId);
+  if (!userIds.length) {
+    const managers = await prisma.user.findMany({
+      where: { isActive: true, role: { in: ["ADMIN", "MANAGER"] } },
+      select: { id: true }
+    });
+    userIds = managers.map((manager) => manager.id);
+  }
+  for (const userId of new Set(userIds)) {
+    await prisma.notification.upsert({
+      where: { userId_claimId_kind: { userId, claimId, kind } },
+      create: { userId, claimId, kind, title, message },
+      update: { title, message, createdAt: new Date(), readAt: null }
+    });
+  }
+}
+
 export function calculatePriority({ urgency, businessImpact, slaDeadline, now = Date.now() }) {
   const hours = (new Date(slaDeadline).getTime() - now) / 3600000;
   const deadlineRisk = hours <= 24 ? 5 : hours <= 72 ? 4 : hours <= 168 ? 2 : 1;
@@ -120,6 +143,7 @@ router.patch("/:id/status", async (req, res, next) => {
     if (result.kind === "missing") return res.status(404).json({ error: { code: "CLAIM_NOT_FOUND", message: "Claim not found." } });
     if (result.kind === "invalid") return res.status(409).json({ error: { code: "INVALID_TRANSITION", message: `Cannot move claim from ${result.status} to ${nextStatus}.` } });
     try { if (["APPROVED", "REJECTED", "CLOSED"].includes(nextStatus)) await removeClaimFromQueue(result.data.id); else await enqueueClaim(result.data); } catch (queueError) { console.warn("Claim status saved but Redis sync failed:", queueError.message); }
+    try { await notifyClaimStakeholders(result.data.id, "STATUS_CHANGED", "Claim status updated", `Claim ${result.data.claimNumber} moved to ${nextStatus.replaceAll("_", " ")}.`); } catch (notificationError) { console.warn("Claim status saved but notification failed:", notificationError.message); }
     res.json({ data: result.data });
   } catch (error) { next(error); }
 });
@@ -142,6 +166,13 @@ router.post("/:id/assign", requireRole("ADMIN", "MANAGER"), async (req, res, nex
     });
     if (result.kind === "claim-missing") return res.status(404).json({ error: { code: "CLAIM_NOT_FOUND", message: "Claim not found." } });
     if (result.kind === "agent-invalid") return res.status(400).json({ error: { code: "INVALID_AGENT", message: "Choose an active agent or manager." } });
+    try {
+      await prisma.notification.upsert({
+        where: { userId_claimId_kind: { userId: result.assignment.agentId, claimId: result.assignment.claimId, kind: "CLAIM_ASSIGNED" } },
+        create: { userId: result.assignment.agentId, claimId: result.assignment.claimId, kind: "CLAIM_ASSIGNED", title: "Claim assigned to you", message: `You have been assigned claim ${result.assignment.claimId}.` },
+        update: { title: "Claim assigned to you", message: `You have been assigned claim ${result.assignment.claimId}.`, createdAt: new Date(), readAt: null }
+      });
+    } catch (notificationError) { console.warn("Claim assigned but notification failed:", notificationError.message); }
     res.status(201).json({ data: result.assignment });
   } catch (error) { next(error); }
 });
