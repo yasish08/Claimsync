@@ -38,6 +38,9 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [claims, setClaims] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [claimFormOpen, setClaimFormOpen] = useState(false);
   const [claimError, setClaimError] = useState("");
@@ -94,7 +97,37 @@ export default function App() {
     } catch (error) { setLoginError(error.message || "Unable to connect to CLAIMSYNC API."); }
   };
 
-  const signOut = () => { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); setClaims([]); setNotice(""); };
+  const signOut = () => { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); setClaims([]); setNotifications([]); setNotificationsOpen(false); setNotice(""); };
+
+  const loadNotifications = async () => {
+    if (!token) return;
+    setNotificationsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/notifications`, { headers: { Authorization: `Bearer ${token}` } });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message || "Could not load notifications.");
+      setNotifications(body.data || []);
+    } catch (error) {
+      setNotice(error.message || "Could not load notifications.");
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  const toggleNotifications = async () => {
+    const opening = !notificationsOpen;
+    setNotificationsOpen(opening);
+    if (opening) await loadNotifications();
+  };
+
+  const markNotificationRead = async (notification) => {
+    try {
+      const response = await fetch(`${API_URL}/api/notifications/${notification.id}/read`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` } });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message || "Could not update notification.");
+      setNotifications((items) => items.map((item) => item.id === notification.id ? { ...item, readAt: new Date().toISOString() } : item));
+    } catch (error) { setNotice(error.message || "Could not update notification."); }
+  };
 
   const submitClaim = async (event) => {
     event.preventDefault(); setClaimError("");
@@ -186,11 +219,12 @@ export default function App() {
           <div className="breadcrumbs">Workspace <span>/</span> <strong>{activeNav}</strong></div>
           <div className="topbar-tools">
             <label className="search-field"><Glyph>⌕</Glyph><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a workspace section…" aria-label="Filter workspace navigation" /><kbd>⌘ K</kbd></label>
-            <button className="notification-button" type="button" aria-label="Notifications" onClick={() => setNotice("Notifications will appear here when claim events are connected.")}>♧<span className="notification-dot" /></button>
+            <button className={`notification-button ${notificationsOpen ? "selected" : ""}`} type="button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={toggleNotifications}>♧{notifications.some((item) => !item.readAt) && <span className="notification-dot" />}</button>
             <div className="user-chip"><div className="user-avatar">{(currentUser?.name || "CT").slice(0,2).toUpperCase()}</div><div><strong>{currentUser?.name || "Claims Team"}</strong><small>{currentUser?.role || "Team member"}</small></div><button className="signout-button" type="button" onClick={signOut}>Sign out</button></div>
           </div>
         </header>
 
+        {notificationsOpen && <section className="notifications-panel" aria-label="Notifications"><div className="notifications-panel-heading"><div><strong>Notifications</strong><small>{notifications.filter((item) => !item.readAt).length} unread</small></div><button type="button" onClick={loadNotifications} disabled={notificationsLoading}>{notificationsLoading ? "Loading…" : "Refresh"}</button></div>{notificationsLoading && !notifications.length ? <p className="notifications-empty">Loading notifications…</p> : notifications.length ? <ul>{notifications.map((item) => <li key={item.id} className={item.readAt ? "is-read" : "is-unread"}><span className={`notification-kind ${item.kind.toLowerCase()}`}>{item.kind.replaceAll("_", " ")}</span><strong>{item.title}</strong><p>{item.message}</p>{item.claim && <small>{item.claim.claimNumber} · Due {new Date(item.claim.slaDeadline).toLocaleString()}</small>}{!item.readAt && <button type="button" onClick={() => markNotificationRead(item)}>Mark as read</button>}</li>)}</ul> : <p className="notifications-empty">You’re all caught up. SLA alerts and claim notifications will appear here.</p>}</section>}
         <div className="page-content">
           {notice && <div className="notice-banner" role="status"><span>ⓘ</span>{notice}<button type="button" onClick={() => setNotice("")} aria-label="Dismiss message">×</button></div>}
 
