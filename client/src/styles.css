@@ -36,3 +36,7 @@
 .notification-kind.sla_at_risk{background:#493a24;color:#ffd18b}
 .notifications-empty{padding:24px 18px;margin:0;color:#9aadc3;font-size:11px;line-height:1.7}
 @media(max-width:760px){.notifications-panel{top:60px;right:12px}}
+
+.notifications-panel-actions{display:flex;align-items:center;gap:6px}
+.notifications-panel-actions button{white-space:nowrap}
+@media(max-width:420px){.notifications-panel-actions{flex-wrap:wrap;justify-content:flex-end}.notifications-panel-actions button{padding:6px 7px}}
