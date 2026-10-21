@@ -153,12 +153,12 @@ export default function App() {
 
   const markAllNotificationsRead = async () => {
     try {
-      const response = await fetch(\`\${API_URL}/api/notifications/read-all\`, { method: "PATCH", headers: { Authorization: \`Bearer \${token}\` } });
+      const response = await fetch(`${API_URL}/api/notifications/read-all`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` } });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message || "Could not mark notifications as read.");
       const readAt = new Date().toISOString();
       setNotifications((items) => items.map((item) => ({ ...item, readAt: item.readAt || readAt })));
-      setNotice(\`Marked \${body.data?.markedRead ?? 0} notification(s) as read.\`);
+      setNotice(`Marked ${body.data?.markedRead ?? 0} notification(s) as read.`);
     } catch (error) { setNotice(error.message || "Could not mark notifications as read."); }
   };
 
