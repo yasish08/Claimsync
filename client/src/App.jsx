@@ -151,6 +151,17 @@ export default function App() {
     } catch (error) { setNotice(error.message || "Could not update notification."); }
   };
 
+  const markAllNotificationsRead = async () => {
+    try {
+      const response = await fetch(\`\${API_URL}/api/notifications/read-all\`, { method: "PATCH", headers: { Authorization: \`Bearer \${token}\` } });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message || "Could not mark notifications as read.");
+      const readAt = new Date().toISOString();
+      setNotifications((items) => items.map((item) => ({ ...item, readAt: item.readAt || readAt })));
+      setNotice(\`Marked \${body.data?.markedRead ?? 0} notification(s) as read.\`);
+    } catch (error) { setNotice(error.message || "Could not mark notifications as read."); }
+  };
+
   const submitClaim = async (event) => {
     event.preventDefault(); setClaimError("");
     try {
@@ -246,7 +257,7 @@ export default function App() {
           </div>
         </header>
 
-        {notificationsOpen && <section className="notifications-panel" aria-label="Notifications"><div className="notifications-panel-heading"><div><strong>Notifications</strong><small>{notifications.filter((item) => !item.readAt).length} unread</small></div><button type="button" onClick={loadNotifications} disabled={notificationsLoading}>{notificationsLoading ? "Loading…" : "Refresh"}</button></div>{notificationsLoading && !notifications.length ? <p className="notifications-empty">Loading notifications…</p> : notifications.length ? <ul>{notifications.map((item) => <li key={item.id} className={item.readAt ? "is-read" : "is-unread"}><span className={`notification-kind ${item.kind.toLowerCase()}`}>{item.kind.replaceAll("_", " ")}</span><strong>{item.title}</strong><p>{item.message}</p>{item.claim && <small>{item.claim.claimNumber} · Due {new Date(item.claim.slaDeadline).toLocaleString()}</small>}{!item.readAt && <button type="button" onClick={() => markNotificationRead(item)}>Mark as read</button>}</li>)}</ul> : <p className="notifications-empty">You’re all caught up. SLA alerts and claim notifications will appear here.</p>}</section>}
+        {notificationsOpen && <section className="notifications-panel" aria-label="Notifications"><div className="notifications-panel-heading"><div><strong>Notifications</strong><small>{notifications.filter((item) => !item.readAt).length} unread</small></div><div className="notifications-panel-actions"><button type="button" onClick={markAllNotificationsRead} disabled={notificationsLoading || !notifications.some((item) => !item.readAt)}>Mark all read</button><button type="button" onClick={loadNotifications} disabled={notificationsLoading}>{notificationsLoading ? "Loading…" : "Refresh"}</button></div></div>{notificationsLoading && !notifications.length ? <p className="notifications-empty">Loading notifications…</p> : notifications.length ? <ul>{notifications.map((item) => <li key={item.id} className={item.readAt ? "is-read" : "is-unread"}><span className={`notification-kind ${item.kind.toLowerCase()}`}>{item.kind.replaceAll("_", " ")}</span><strong>{item.title}</strong><p>{item.message}</p>{item.claim && <small>{item.claim.claimNumber} · Due {new Date(item.claim.slaDeadline).toLocaleString()}</small>}{!item.readAt && <button type="button" onClick={() => markNotificationRead(item)}>Mark as read</button>}</li>)}</ul> : <p className="notifications-empty">You’re all caught up. SLA alerts and claim notifications will appear here.</p>}</section>}
         <div className="page-content">
           {notice && <div className="notice-banner" role="status"><span>ⓘ</span>{notice}<button type="button" onClick={() => setNotice("")} aria-label="Dismiss message">×</button></div>}
 
