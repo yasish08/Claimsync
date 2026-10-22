@@ -5,9 +5,9 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 const navGroups = [
   { label: "WORKSPACE", items: [
     { icon: "▦", label: "Overview" },
-    { icon: "▤", label: "Claims", soon: true },
-    { icon: "⇅", label: "Priority queue", soon: true },
-    { icon: "＋", label: "Submit a claim", soon: true },
+    { icon: "▤", label: "Claims" },
+    { icon: "⇅", label: "Priority queue" },
+    { icon: "＋", label: "Submit a claim" },
     { icon: "▥", label: "Analytics", soon: true }
   ]},
   { label: "MANAGEMENT", items: [
@@ -38,6 +38,8 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [claims, setClaims] = useState([]);
+  const [claimsPagination, setClaimsPagination] = useState({ total: 0, totalPages: 1 });
+  const [analytics, setAnalytics] = useState(null);
   const [agents, setAgents] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -75,12 +77,14 @@ export default function App() {
     setClaimsLoading(true);
     Promise.all([
       fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`${API_URL}/api/claims?page=1&pageSize=100`, { headers: { Authorization: `Bearer ${token}` } })
-    ]).then(async ([userResponse, claimsResponse]) => {
+      fetch(`${API_URL}/api/claims?page=1&pageSize=100`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/api/analytics/overview`, { headers: { Authorization: `Bearer ${token}` } })
+    ]).then(async ([userResponse, claimsResponse, analyticsResponse]) => {
       if (userResponse.status === 401 || claimsResponse.status === 401) throw new Error("Your session expired. Please sign in again.");
       if (!userResponse.ok || !claimsResponse.ok) throw new Error("Could not load the workspace. Check that the database is migrated.");
       const userBody = await userResponse.json();
       const claimsBody = await claimsResponse.json();
+      const analyticsBody = analyticsResponse.ok ? await analyticsResponse.json() : null;
       let teamUsers = [];
       if (["ADMIN", "MANAGER"].includes(userBody.data.user.role)) {
         const usersResponse = await fetch(`${API_URL}/api/users`, { headers: { Authorization: `Bearer ${token}` } });
@@ -89,7 +93,7 @@ export default function App() {
           teamUsers = (usersBody.data || []).filter((user) => user.isActive && ["AGENT", "MANAGER"].includes(user.role));
         }
       }
-      if (!cancelled) { setCurrentUser(userBody.data.user); setClaims(claimsBody.data || []); setAgents(teamUsers); }
+      if (!cancelled) { setCurrentUser(userBody.data.user); setClaims(claimsBody.data || []); setClaimsPagination(claimsBody.pagination || { total: (claimsBody.data || []).length, totalPages: 1 }); setAnalytics(analyticsBody?.data || null); setAgents(teamUsers); }
     }).catch((error) => {
       if (!cancelled) { setNotice(error.message); if (error.message.includes("session expired")) { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); } }
     }).finally(() => { if (!cancelled) setClaimsLoading(false); });
@@ -186,7 +190,10 @@ export default function App() {
     })).filter((group) => group.items.length > 0);
   }, [search]);
 
+  const displayedClaims = activeNav === "Priority queue" ? claims.filter((claim) => ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"].includes(claim.status)).sort((a, b) => b.priorityScore - a.priorityScore) : claims;
+
   const selectNav = (item) => {
+    if (item.label === "Submit a claim") { setClaimFormOpen(true); setActiveNav(item.label); setNotice(""); return; }
     if (item.soon) {
       setNotice(`${item.label} will be enabled as that workflow is implemented.`);
       return;
@@ -299,7 +306,7 @@ export default function App() {
             {metrics.map((metric, index) => (
               <article className="metric-card" key={metric.label} style={{ "--stagger": index }}>
                 <div className="metric-top"><span>{metric.label}</span><span className={`metric-icon ${metric.tone}`}><Glyph>{metric.icon}</Glyph></span></div>
-                <div className="metric-value">{metric.label === "Total claims" ? claims.length : metric.label === "Awaiting review" ? claims.filter((claim) => ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"].includes(claim.status)).length : metric.label === "SLA at risk" ? claims.filter((claim) => !["APPROVED", "REJECTED", "CLOSED"].includes(claim.status) && new Date(claim.slaDeadline).getTime() < Date.now() + 24 * 3600000).length : claims.filter((claim) => ["APPROVED", "REJECTED", "CLOSED"].includes(claim.status) && claim.resolvedAt && new Date(claim.resolvedAt).toDateString() === new Date().toDateString()).length}</div>
+                <div className="metric-value">{metric.label === "Total claims" ? (analytics?.metrics?.totalClaims ?? claimsPagination.total) : metric.label === "Awaiting review" ? (analytics?.metrics?.awaitingReview ?? claims.filter((claim) => ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"].includes(claim.status)).length) : metric.label === "SLA at risk" ? (analytics?.metrics?.slaAtRisk ?? claims.filter((claim) => !["APPROVED", "REJECTED", "CLOSED"].includes(claim.status) && new Date(claim.slaDeadline).getTime() < Date.now() + 24 * 3600000).length) : (analytics?.metrics?.resolvedToday ?? claims.filter((claim) => ["APPROVED", "REJECTED", "CLOSED"].includes(claim.status) && claim.resolvedAt && new Date(claim.resolvedAt).toDateString() === new Date().toDateString()).length)}</div>
                 <div className="metric-footer"><span>{metric.detail}</span><span className={`mini-chart chart-${metric.tone}`} aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></span></div>
               </article>
             ))}
@@ -308,7 +315,7 @@ export default function App() {
           <section className="dashboard-grid">
             <article className="surface-card priority-card">
               <div className="surface-heading"><div><span className="section-eyebrow">WHAT MATTERS NEXT</span><h2>Priority queue</h2><p>The right work, in the right order.</p></div><span className="status-pill">LIVE CLAIMS</span></div>
-              {claimsLoading ? <div className="claims-empty-state">Loading your claims…</div> : claims.length ? <div className="claims-table-wrap"><table className="claims-table"><thead><tr><th>CLAIM</th><th>PRIORITY</th><th>STATUS</th><th>SLA DEADLINE</th>{["ADMIN","MANAGER"].includes(currentUser?.role) && <th>ASSIGNEE</th>}<th>ACTION</th></tr></thead><tbody>{claims.slice(0, 8).map((claim) => <tr key={claim.id}><td><strong>{claim.claimNumber}</strong><small>{claim.claimantName} · {claim.type}</small></td><td><span className={`priority-badge ${claim.priority.toLowerCase()}`}>{claim.priority}</span><small>Score {claim.priorityScore}</small></td><td><span className={`claim-status ${claim.status.toLowerCase()}`}>{claim.status.replaceAll("_", " ")}</span></td><td>{new Date(claim.slaDeadline).toLocaleDateString()}</td>{["ADMIN","MANAGER"].includes(currentUser?.role) && <td><select aria-label={`Assign ${claim.claimNumber}`} value={claim.assignments?.find((assignment) => assignment.status === "ACTIVE")?.agentId || ""} onChange={(event) => assignClaim(claim, event.target.value)}><option value="">Unassigned</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></td>}<td><select aria-label={`Update status for ${claim.claimNumber}`} value={claim.status} onChange={(event) => changeClaimStatus(claim, event.target.value)}><option value={claim.status}>{claim.status.replaceAll("_", " ")}</option>{({SUBMITTED:["UNDER_REVIEW","CLOSED"],UNDER_REVIEW:["NEEDS_INFORMATION","APPROVED","REJECTED","CLOSED"],NEEDS_INFORMATION:["UNDER_REVIEW","CLOSED"],APPROVED:["CLOSED"],REJECTED:["CLOSED"],CLOSED:[]})[claim.status].filter((status) => !["APPROVED","REJECTED"].includes(status) || ["ADMIN","MANAGER"].includes(currentUser?.role)).map((status) => <option key={status} value={status}>{status.replaceAll("_"," ")}</option>)}</select></td></tr>)}</tbody></table></div> : <div className="empty-queue">
+              {claimsLoading ? <div className="claims-empty-state">Loading your claims…</div> : displayedClaims.length ? <div className="claims-table-wrap"><table className="claims-table"><thead><tr><th>CLAIM</th><th>PRIORITY</th><th>STATUS</th><th>SLA DEADLINE</th>{["ADMIN","MANAGER"].includes(currentUser?.role) && <th>ASSIGNEE</th>}<th>ACTION</th></tr></thead><tbody>{displayedClaims.slice(0, 8).map((claim) => <tr key={claim.id}><td><strong>{claim.claimNumber}</strong><small>{claim.claimantName} · {claim.type}</small></td><td><span className={`priority-badge ${claim.priority.toLowerCase()}`}>{claim.priority}</span><small>Score {claim.priorityScore}</small></td><td><span className={`claim-status ${claim.status.toLowerCase()}`}>{claim.status.replaceAll("_", " ")}</span></td><td>{new Date(claim.slaDeadline).toLocaleDateString()}</td>{["ADMIN","MANAGER"].includes(currentUser?.role) && <td><select aria-label={`Assign ${claim.claimNumber}`} value={claim.assignments?.find((assignment) => assignment.status === "ACTIVE")?.agentId || ""} onChange={(event) => assignClaim(claim, event.target.value)}><option value="">Unassigned</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></td>}<td><select aria-label={`Update status for ${claim.claimNumber}`} value={claim.status} onChange={(event) => changeClaimStatus(claim, event.target.value)}><option value={claim.status}>{claim.status.replaceAll("_", " ")}</option>{({SUBMITTED:["UNDER_REVIEW","CLOSED"],UNDER_REVIEW:["NEEDS_INFORMATION","APPROVED","REJECTED","CLOSED"],NEEDS_INFORMATION:["UNDER_REVIEW","CLOSED"],APPROVED:["CLOSED"],REJECTED:["CLOSED"],CLOSED:[]})[claim.status].filter((status) => !["APPROVED","REJECTED"].includes(status) || ["ADMIN","MANAGER"].includes(currentUser?.role)).map((status) => <option key={status} value={status}>{status.replaceAll("_"," ")}</option>)}</select></td></tr>)}</tbody></table></div> : <div className="empty-queue">
                 <div className="queue-art" aria-hidden="true"><div className="queue-paper paper-back" /><div className="queue-paper paper-front"><i /><i /><i /></div><div className="queue-badge">✓</div></div>
                 <h3>Your queue is taking shape</h3>
                 <p>Submit a claim to see its priority score, service deadline, status, and next available actions here.</p>
