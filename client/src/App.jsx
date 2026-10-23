@@ -78,13 +78,13 @@ export default function App() {
     Promise.all([
       fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),
       fetch(`${API_URL}/api/claims?page=1&pageSize=100`, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`${API_URL}/api/analytics/overview`, { headers: { Authorization: `Bearer ${token}` } })
+      fetch(`${API_URL}/api/analytics/overview`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null)
     ]).then(async ([userResponse, claimsResponse, analyticsResponse]) => {
       if (userResponse.status === 401 || claimsResponse.status === 401) throw new Error("Your session expired. Please sign in again.");
       if (!userResponse.ok || !claimsResponse.ok) throw new Error("Could not load the workspace. Check that the database is migrated.");
       const userBody = await userResponse.json();
       const claimsBody = await claimsResponse.json();
-      const analyticsBody = analyticsResponse.ok ? await analyticsResponse.json() : null;
+      const analyticsBody = analyticsResponse?.ok ? await analyticsResponse.json() : null;
       let teamUsers = [];
       if (["ADMIN", "MANAGER"].includes(userBody.data.user.role)) {
         const usersResponse = await fetch(`${API_URL}/api/users`, { headers: { Authorization: `Bearer ${token}` } });
