@@ -40,3 +40,21 @@
 .notifications-panel-actions{display:flex;align-items:center;gap:6px}
 .notifications-panel-actions button{white-space:nowrap}
 @media(max-width:420px){.notifications-panel-actions{flex-wrap:wrap;justify-content:flex-end}.notifications-panel-actions button{padding:6px 7px}}
+
+
+/* Analytics and team workspace views */
+.workspace-view{display:grid;gap:18px;animation:fade-in .25s ease both}
+.workspace-view>.section-title-row{margin:0}
+.workspace-view>.section-title-row p{margin:6px 0 0;color:#8fa4bc;font-size:11px}
+.workspace-view .metrics-grid{margin:0}
+.workspace-view .dashboard-grid{margin:0}
+.workspace-view .surface-card{min-width:0}
+.analytics-list{display:grid;gap:16px;padding:18px 20px 22px}
+.analytics-row{display:grid;grid-template-columns:minmax(95px,1fr) minmax(70px,2fr) 28px;align-items:center;gap:12px;color:#b9c9db;font-size:11px}
+.analytics-row>span{overflow-wrap:anywhere}
+.analytics-row>strong{text-align:right;color:#edf4fb;font-size:12px}
+.analytics-bar{height:8px;overflow:hidden;border-radius:999px;background:#22364b}
+.analytics-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#4e9cf5,#70dfbe);transition:width .25s ease}
+.analytics-priority{min-width:0}
+@keyframes fade-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:460px){.analytics-row{grid-template-columns:minmax(72px,1fr) minmax(45px,1.2fr) 24px;gap:8px;font-size:10px}.analytics-list{padding:14px}}
