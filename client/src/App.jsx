@@ -38,6 +38,9 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [claims, setClaims] = useState([]);
+  const [priorityClaims, setPriorityClaims] = useState(null);
+  const [prioritySource, setPrioritySource] = useState("");
+  const [agentWorkloads, setAgentWorkloads] = useState({});
   const [claimsPagination, setClaimsPagination] = useState({ total: 0, totalPages: 1 });
   const [analytics, setAnalytics] = useState(null);
   const [agents, setAgents] = useState([]);
@@ -100,6 +103,31 @@ export default function App() {
     return () => { cancelled = true; };
   }, [token]);
 
+  const loadPriorityQueue = async () => {
+    if (!token) return;
+    try {
+      const response = await fetch(`${API_URL}/api/claims/priority-queue`, { headers: { Authorization: `Bearer ${token}` } });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message || "Could not load the priority queue.");
+      setPriorityClaims(body.data || []);
+      setPrioritySource(body.source || "database");
+    } catch (error) {
+      setPriorityClaims(null);
+      setPrioritySource("");
+      setNotice(error.message || "Could not load the priority queue.");
+    }
+  };
+
+  const loadAgentWorkloads = async () => {
+    if (!token || !["ADMIN", "MANAGER"].includes(currentUser?.role)) return;
+    try {
+      const response = await fetch(`${API_URL}/api/analytics/agents`, { headers: { Authorization: `Bearer ${token}` } });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message || "Could not load agent workloads.");
+      setAgentWorkloads(Object.fromEntries((body.data || []).map((agent) => [agent.id, agent.activeAssignments ?? 0])));
+    } catch (error) { setNotice(error.message || "Could not load agent workloads."); }
+  };
+
   const signIn = async (event) => {
     event.preventDefault(); setLoginError("");
     try {
@@ -110,18 +138,19 @@ export default function App() {
     } catch (error) { setLoginError(error.message || "Unable to connect to CLAIMSYNC API."); }
   };
 
-  const signOut = () => { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); setClaims([]); setAgents([]); setNotifications([]); setNotificationsOpen(false); setNotice(""); };
+  const signOut = () => { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); setClaims([]); setPriorityClaims(null); setPrioritySource(""); setAgentWorkloads({}); setAgents([]); setNotifications([]); setNotificationsOpen(false); setNotice(""); };
 
   const assignClaim = async (claim, agentId) => {
-    if (!agentId) return;
     try {
-      const response = await fetch(`${API_URL}/api/claims/${claim.id}/assign`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ agentId }) });
+      const response = await fetch(`${API_URL}/api/claims/${claim.id}/assign`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ agentId: agentId || null }) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message || "Claim assignment failed.");
       const agent = agents.find((item) => item.id === agentId);
-      setClaims((items) => items.map((item) => item.id === claim.id ? { ...item, assignments: [{ ...body.data, agent }] } : item));
-      setNotice(`${claim.claimNumber} assigned to ${agent?.name || "the selected agent"}.`);
+      setClaims((items) => items.map((item) => item.id === claim.id ? { ...item, assignments: agentId ? [{ ...body.data, agent }] : [] } : item));
+      setNotice(agentId ? `${claim.claimNumber} assigned to ${agent?.name || "the selected agent"}.` : `${claim.claimNumber} is now unassigned.`);
       void loadNotifications();
+      void loadPriorityQueue();
+      void loadAgentWorkloads();
     } catch (error) { setNotice(error.message || "Claim assignment failed."); }
   };
 
@@ -173,12 +202,14 @@ export default function App() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message || "Could not submit claim.");
       setClaims((previous) => [body.data, ...previous].sort((a, b) => b.priorityScore - a.priorityScore));
+      void loadPriorityQueue();
+      void loadAgentWorkloads();
       setClaimFormOpen(false); setClaimForm({ claimantName: "", claimantEmail: "", policyNumber: "", type: "AUTO", description: "", estimatedAmount: "", urgency: 3, businessImpact: 3, slaDeadline: "" }); setNotice(`Claim ${body.data.claimNumber} submitted successfully.`);
     } catch (error) { setClaimError(error.message || "Could not submit claim."); }
   };
 
   const changeClaimStatus = async (claim, status) => {
-    try { const response = await fetch(`${API_URL}/api/claims/${claim.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }); const body = await response.json(); if (!response.ok) throw new Error(body.error?.message || "Status update failed."); setClaims((items) => items.map((item) => item.id === claim.id ? { ...item, ...body.data } : item)); setNotice(`${claim.claimNumber} moved to ${status.replaceAll("_", " ").toLowerCase()}.`); } catch (error) { setNotice(error.message); }
+    try { const response = await fetch(`${API_URL}/api/claims/${claim.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }); const body = await response.json(); if (!response.ok) throw new Error(body.error?.message || "Status update failed."); setClaims((items) => items.map((item) => item.id === claim.id ? { ...item, ...body.data } : item)); void loadPriorityQueue(); void loadAgentWorkloads(); setNotice(`${claim.claimNumber} moved to ${status.replaceAll("_", " ").toLowerCase()}.`); } catch (error) { setNotice(error.message); }
   };
 
   const filteredNav = useMemo(() => {
@@ -190,7 +221,7 @@ export default function App() {
     })).filter((group) => group.items.length > 0);
   }, [search]);
 
-  const displayedClaims = activeNav === "Priority queue" ? claims.filter((claim) => ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"].includes(claim.status)).sort((a, b) => b.priorityScore - a.priorityScore) : claims;
+  const displayedClaims = activeNav === "Priority queue" ? (priorityClaims ?? claims.filter((claim) => ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"].includes(claim.status)).sort((a, b) => b.priorityScore - a.priorityScore)) : claims;
 
   const selectNav = (item) => {
     if (item.label === "Submit a claim") { setClaimFormOpen(true); setActiveNav(item.label); setNotice(""); return; }
@@ -200,6 +231,8 @@ export default function App() {
     }
     setActiveNav(item.label);
     setNotice("");
+    if (item.label === "Priority queue") void loadPriorityQueue();
+    if (item.label === "Agents") void loadAgentWorkloads();
   };
 
   if (!token) return (
@@ -282,8 +315,8 @@ export default function App() {
             </section>
           ) : activeNav === "Agents" ? (
             <section className="workspace-view">
-              <div className="section-title-row"><div><span className="section-eyebrow">TEAM MANAGEMENT</span><h2>Agents</h2><p>Active agents and managers available for claim assignment.</p></div><button type="button" className="cancel-button" onClick={async () => { try { const response = await fetch(`${API_URL}/api/users`, { headers: { Authorization: `Bearer ${token}` } }); const body = await response.json(); if (!response.ok) throw new Error(body.error?.message || "Could not refresh team."); setAgents((body.data || []).filter((user) => user.isActive && ["AGENT", "MANAGER"].includes(user.role))); setNotice("Team list refreshed."); } catch (error) { setNotice(error.message); } }}>Refresh team ↻</button></div>
-              {["ADMIN","MANAGER"].includes(currentUser?.role) ? <article className="surface-card"><div className="claims-table-wrap"><table className="claims-table"><thead><tr><th>TEAM MEMBER</th><th>EMAIL</th><th>ROLE</th><th>ACTIVE CLAIMS</th></tr></thead><tbody>{agents.map((agent) => <tr key={agent.id}><td><strong>{agent.name}</strong></td><td>{agent.email}</td><td><span className="claim-status under_review">{agent.role}</span></td><td>{claims.filter((claim) => claim.assignments?.some((assignment) => assignment.agentId === agent.id && assignment.status === "ACTIVE")).length}</td></tr>)}</tbody></table>{!agents.length && <p className="notifications-empty">No active agents or managers were found.</p>}</div></article> : <article className="surface-card"><p className="notifications-empty">Team directory is restricted to administrators and managers.</p></article>}
+              <div className="section-title-row"><div><span className="section-eyebrow">TEAM MANAGEMENT</span><h2>Agents</h2><p>Active agents and managers available for claim assignment.</p></div><button type="button" className="cancel-button" onClick={async () => { try { const response = await fetch(`${API_URL}/api/users`, { headers: { Authorization: `Bearer ${token}` } }); const body = await response.json(); if (!response.ok) throw new Error(body.error?.message || "Could not refresh team."); setAgents((body.data || []).filter((user) => user.isActive && ["AGENT", "MANAGER"].includes(user.role))); await loadAgentWorkloads(); setNotice("Team list refreshed."); } catch (error) { setNotice(error.message); } }}>Refresh team ↻</button></div>
+              {["ADMIN","MANAGER"].includes(currentUser?.role) ? <article className="surface-card"><div className="claims-table-wrap"><table className="claims-table"><thead><tr><th>TEAM MEMBER</th><th>EMAIL</th><th>ROLE</th><th>ACTIVE CLAIMS</th></tr></thead><tbody>{agents.map((agent) => <tr key={agent.id}><td><strong>{agent.name}</strong></td><td>{agent.email}</td><td><span className="claim-status under_review">{agent.role}</span></td><td>{agentWorkloads[agent.id] ?? "—"}</td></tr>)}</tbody></table>{!agents.length && <p className="notifications-empty">No active agents or managers were found.</p>}</div></article> : <article className="surface-card"><p className="notifications-empty">Team directory is restricted to administrators and managers.</p></article>}
             </section>
           ) : (
             <>
@@ -333,7 +366,7 @@ export default function App() {
 
           <section className="dashboard-grid">
             <article className="surface-card priority-card">
-              <div className="surface-heading"><div><span className="section-eyebrow">WHAT MATTERS NEXT</span><h2>Priority queue</h2><p>The right work, in the right order.</p></div><span className="status-pill">LIVE CLAIMS</span></div>
+              <div className="surface-heading"><div><span className="section-eyebrow">WHAT MATTERS NEXT</span><h2>{activeNav === "Priority queue" ? "Priority queue" : "Priority queue"}</h2><p>{activeNav === "Priority queue" ? `Ordered by priority · ${prioritySource || "fallback view"}` : "The right work, in the right order."}</p></div><div className="notifications-panel-actions"><span className="status-pill">LIVE CLAIMS</span>{activeNav === "Priority queue" && <button type="button" className="cancel-button" onClick={() => void loadPriorityQueue()}>Refresh ↻</button>}</div></div>
               {claimsLoading ? <div className="claims-empty-state">Loading your claims…</div> : displayedClaims.length ? <div className="claims-table-wrap"><table className="claims-table"><thead><tr><th>CLAIM</th><th>PRIORITY</th><th>STATUS</th><th>SLA DEADLINE</th>{["ADMIN","MANAGER"].includes(currentUser?.role) && <th>ASSIGNEE</th>}<th>ACTION</th></tr></thead><tbody>{displayedClaims.slice(0, 8).map((claim) => <tr key={claim.id}><td><strong>{claim.claimNumber}</strong><small>{claim.claimantName} · {claim.type}</small></td><td><span className={`priority-badge ${claim.priority.toLowerCase()}`}>{claim.priority}</span><small>Score {claim.priorityScore}</small></td><td><span className={`claim-status ${claim.status.toLowerCase()}`}>{claim.status.replaceAll("_", " ")}</span></td><td>{new Date(claim.slaDeadline).toLocaleDateString()}</td>{["ADMIN","MANAGER"].includes(currentUser?.role) && <td><select aria-label={`Assign ${claim.claimNumber}`} value={claim.assignments?.find((assignment) => assignment.status === "ACTIVE")?.agentId || ""} onChange={(event) => assignClaim(claim, event.target.value)}><option value="">Unassigned</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></td>}<td><select aria-label={`Update status for ${claim.claimNumber}`} value={claim.status} onChange={(event) => changeClaimStatus(claim, event.target.value)}><option value={claim.status}>{claim.status.replaceAll("_", " ")}</option>{({SUBMITTED:["UNDER_REVIEW","CLOSED"],UNDER_REVIEW:["NEEDS_INFORMATION","APPROVED","REJECTED","CLOSED"],NEEDS_INFORMATION:["UNDER_REVIEW","CLOSED"],APPROVED:["CLOSED"],REJECTED:["CLOSED"],CLOSED:[]})[claim.status].filter((status) => !["APPROVED","REJECTED"].includes(status) || ["ADMIN","MANAGER"].includes(currentUser?.role)).map((status) => <option key={status} value={status}>{status.replaceAll("_"," ")}</option>)}</select></td></tr>)}</tbody></table></div> : <div className="empty-queue">
                 <div className="queue-art" aria-hidden="true"><div className="queue-paper paper-back" /><div className="queue-paper paper-front"><i /><i /><i /></div><div className="queue-badge">✓</div></div>
                 <h3>Your queue is taking shape</h3>
