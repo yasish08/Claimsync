@@ -150,26 +150,41 @@ router.patch("/:id/status", async (req, res, next) => {
 
 router.post("/:id/assign", requireRole("ADMIN", "MANAGER"), async (req, res, next) => {
   try {
-    const agentId = typeof req.body?.agentId === "string" ? req.body.agentId : "";
-    if (!agentId) return res.status(400).json({ error: { code: "AGENT_REQUIRED", message: "Choose an agent." } });
-    const result = await prisma.$transaction(async tx => {
-      const [claim, agent] = await Promise.all([
-        tx.claim.findUnique({ where: { id: req.params.id } }),
-        tx.user.findUnique({ where: { id: agentId } })
-      ]);
+    const requestedAgentId = req.body?.agentId;
+    const agentId = typeof requestedAgentId === "string" && requestedAgentId.trim() ? requestedAgentId : null;
+    const result = await prisma.$transaction(async (tx) => {
+      const claim = await tx.claim.findUnique({ where: { id: req.params.id } });
       if (!claim) return { kind: "claim-missing" };
+      const activeAssignments = await tx.claimAssignment.findMany({
+        where: { claimId: claim.id, status: "ACTIVE" },
+        include: { agent: { select: { name: true } } }
+      });
+      if (!agentId) {
+        if (!activeAssignments.length) return { kind: "already-unassigned", claimNumber: claim.claimNumber };
+        await tx.claimAssignment.updateMany({
+          where: { claimId: claim.id, status: "ACTIVE" },
+          data: { status: "REASSIGNED", completedAt: new Date() }
+        });
+        await tx.claimHistory.create({
+          data: { claimId: claim.id, actorId: req.user.id, action: "CLAIM_UNASSIGNED", note: "Active assignment cleared.", metadata: { previousAgentIds: activeAssignments.map((assignment) => assignment.agentId) } }
+        });
+        return { kind: "unassigned", claimNumber: claim.claimNumber };
+      }
+      const agent = await tx.user.findUnique({ where: { id: agentId } });
       if (!agent || !agent.isActive || !["AGENT", "MANAGER"].includes(agent.role)) return { kind: "agent-invalid" };
       await tx.claimAssignment.updateMany({ where: { claimId: claim.id, status: "ACTIVE" }, data: { status: "REASSIGNED", completedAt: new Date() } });
       const assignment = await tx.claimAssignment.create({ data: { claimId: claim.id, agentId: agent.id, assignedBy: req.user.id } });
       await tx.claimHistory.create({ data: { claimId: claim.id, actorId: req.user.id, action: "CLAIM_ASSIGNED", note: `Assigned to ${agent.name}.`, metadata: { agentId: agent.id } } });
-      return { assignment, claimNumber: claim.claimNumber };
+      return { kind: "assigned", assignment, agentId: agent.id, claimNumber: claim.claimNumber };
     });
     if (result.kind === "claim-missing") return res.status(404).json({ error: { code: "CLAIM_NOT_FOUND", message: "Claim not found." } });
     if (result.kind === "agent-invalid") return res.status(400).json({ error: { code: "INVALID_AGENT", message: "Choose an active agent or manager." } });
+    if (result.kind === "already-unassigned") return res.json({ data: null, message: "Claim is already unassigned." });
+    if (result.kind === "unassigned") return res.json({ data: null, message: "Claim unassigned." });
     try {
       await prisma.notification.upsert({
-        where: { userId_claimId_kind: { userId: result.assignment.agentId, claimId: result.assignment.claimId, kind: "CLAIM_ASSIGNED" } },
-        create: { userId: result.assignment.agentId, claimId: result.assignment.claimId, kind: "CLAIM_ASSIGNED", title: "Claim assigned to you", message: `You have been assigned claim ${result.claimNumber}.` },
+        where: { userId_claimId_kind: { userId: result.assignment.agentId, claimId: req.params.id, kind: "CLAIM_ASSIGNED" } },
+        create: { userId: result.assignment.agentId, claimId: req.params.id, kind: "CLAIM_ASSIGNED", title: "Claim assigned to you", message: `You have been assigned claim ${result.claimNumber}.` },
         update: { title: "Claim assigned to you", message: `You have been assigned claim ${result.claimNumber}.`, createdAt: new Date(), readAt: null }
       });
     } catch (notificationError) { console.warn("Claim assigned but notification failed:", notificationError.message); }
