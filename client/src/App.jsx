@@ -12,7 +12,7 @@ const navGroups = [
   ]},
   { label: "MANAGEMENT", items: [
     { icon: "♙", label: "Agents" },
-    { icon: "◷", label: "SLA settings", soon: true }
+    { icon: "◷", label: "SLA settings" }
   ]}
 ];
 
@@ -31,6 +31,9 @@ export default function App() {
   const [api, setApi] = useState({ state: "checking", message: "Checking connection" });
   const [activeNav, setActiveNav] = useState("Overview");
   const [search, setSearch] = useState("");
+  const [claimSearch, setClaimSearch] = useState("");
+  const [claimStatusFilter, setClaimStatusFilter] = useState("ALL");
+  const [claimTypeFilter, setClaimTypeFilter] = useState("ALL");
   const [notice, setNotice] = useState("");
   const [token, setToken] = useState(() => window.sessionStorage.getItem("claimsync_token") || "");
   const [currentUser, setCurrentUser] = useState(null);
@@ -223,6 +226,12 @@ export default function App() {
 
   const displayedClaims = activeNav === "Priority queue" ? (priorityClaims ?? claims.filter((claim) => ["SUBMITTED", "UNDER_REVIEW", "NEEDS_INFORMATION"].includes(claim.status)).sort((a, b) => b.priorityScore - a.priorityScore)) : claims;
 
+  const claimsViewRows = claims.filter((claim) => {
+    const query = claimSearch.trim().toLowerCase();
+    const matchesSearch = !query || [claim.claimNumber, claim.claimantName, claim.claimantEmail, claim.policyNumber].some((value) => String(value || "").toLowerCase().includes(query));
+    return matchesSearch && (claimStatusFilter === "ALL" || claim.status === claimStatusFilter) && (claimTypeFilter === "ALL" || claim.type === claimTypeFilter);
+  });
+
   const selectNav = (item) => {
     if (item.label === "Submit a claim") { setClaimFormOpen(true); setActiveNav(item.label); setNotice(""); return; }
     if (item.soon) {
@@ -317,6 +326,26 @@ export default function App() {
             <section className="workspace-view">
               <div className="section-title-row"><div><span className="section-eyebrow">TEAM MANAGEMENT</span><h2>Agents</h2><p>Active agents and managers available for claim assignment.</p></div><button type="button" className="cancel-button" onClick={async () => { try { const response = await fetch(`${API_URL}/api/users`, { headers: { Authorization: `Bearer ${token}` } }); const body = await response.json(); if (!response.ok) throw new Error(body.error?.message || "Could not refresh team."); setAgents((body.data || []).filter((user) => user.isActive && ["AGENT", "MANAGER"].includes(user.role))); await loadAgentWorkloads(); setNotice("Team list refreshed."); } catch (error) { setNotice(error.message); } }}>Refresh team ↻</button></div>
               {["ADMIN","MANAGER"].includes(currentUser?.role) ? <article className="surface-card"><div className="claims-table-wrap"><table className="claims-table"><thead><tr><th>TEAM MEMBER</th><th>EMAIL</th><th>ROLE</th><th>ACTIVE CLAIMS</th></tr></thead><tbody>{agents.map((agent) => <tr key={agent.id}><td><strong>{agent.name}</strong></td><td>{agent.email}</td><td><span className="claim-status under_review">{agent.role}</span></td><td>{agentWorkloads[agent.id] ?? "—"}</td></tr>)}</tbody></table>{!agents.length && <p className="notifications-empty">No active agents or managers were found.</p>}</div></article> : <article className="surface-card"><p className="notifications-empty">Team directory is restricted to administrators and managers.</p></article>}
+            </section>
+          ) : activeNav === "Claims" ? (
+            <section className="workspace-view">
+              <div className="section-title-row"><div><span className="section-eyebrow">CLAIM REGISTER</span><h2>All claims</h2><p>Search and filter claims in your workspace.</p></div><button type="button" className="login-submit" onClick={() => setClaimFormOpen(true)}>+ New claim</button></div>
+              <article className="surface-card claims-register">
+                <div className="claims-filter-bar">
+                  <label>Search claims<input value={claimSearch} onChange={(event) => setClaimSearch(event.target.value)} placeholder="Claim number, claimant, policy…" /></label>
+                  <label>Status<select value={claimStatusFilter} onChange={(event) => setClaimStatusFilter(event.target.value)}><option value="ALL">All statuses</option>{["SUBMITTED","UNDER_REVIEW","NEEDS_INFORMATION","APPROVED","REJECTED","CLOSED"].map((status) => <option key={status} value={status}>{status.replaceAll("_"," ")}</option>)}</select></label>
+                  <label>Type<select value={claimTypeFilter} onChange={(event) => setClaimTypeFilter(event.target.value)}><option value="ALL">All types</option>{["AUTO","HEALTH","PROPERTY","TRAVEL","LIFE","OTHER"].map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                  <button type="button" className="cancel-button" onClick={() => { setClaimSearch(""); setClaimStatusFilter("ALL"); setClaimTypeFilter("ALL"); }}>Clear filters</button>
+                </div>
+                <div className="claims-register-summary"><span>{claimsViewRows.length} shown</span><span>{claimsPagination.total} total in database · first page loaded</span></div>
+                {claimsLoading ? <div className="claims-empty-state">Loading claims…</div> : claimsViewRows.length ? <div className="claims-table-wrap"><table className="claims-table"><thead><tr><th>CLAIM</th><th>TYPE</th><th>AMOUNT</th><th>PRIORITY</th><th>STATUS</th><th>SLA DEADLINE</th></tr></thead><tbody>{claimsViewRows.map((claim) => <tr key={claim.id}><td><strong>{claim.claimNumber}</strong><small>{claim.claimantName} · {claim.policyNumber}</small></td><td>{claim.type}</td><td>{Number(claim.estimatedAmount).toLocaleString(undefined,{style:"currency",currency:"USD"})}</td><td><span className={"priority-badge " + String(claim.priority || "LOW").toLowerCase()}>{claim.priority}</span><small>Score {claim.priorityScore}</small></td><td><span className={"claim-status " + claim.status.toLowerCase()}>{claim.status.replaceAll("_"," ")}</span></td><td>{new Date(claim.slaDeadline).toLocaleString()}</td></tr>)}</tbody></table></div> : <div className="claims-empty-state">No claims match these filters. Try clearing filters.</div>}
+              </article>
+            </section>
+          ) : activeNav === "SLA settings" ? (
+            <section className="workspace-view">
+              <div className="section-title-row"><div><span className="section-eyebrow">SERVICE LEVEL MONITORING</span><h2>SLA monitoring</h2><p>Current server behavior and deadline health.</p></div><button type="button" className="cancel-button" onClick={async () => { try { const response = await fetch(API_URL + "/api/analytics/overview", { headers: { Authorization: "Bearer " + token } }); const body = await response.json(); if (!response.ok) throw new Error(body.error?.message || "Could not refresh SLA metrics."); setAnalytics(body.data); setNotice("SLA metrics refreshed."); } catch (error) { setNotice(error.message); } }}>Refresh status ↻</button></div>
+              <section className="metrics-grid"><article className="metric-card"><div className="metric-top">Risk window</div><div className="metric-value">24h</div><div className="metric-footer"><span>Open claims due within 24 hours</span></div></article><article className="metric-card"><div className="metric-top">Scan interval</div><div className="metric-value">60s</div><div className="metric-footer"><span>Background scan default</span></div></article><article className="metric-card"><div className="metric-top">At risk</div><div className="metric-value">{analytics?.metrics?.slaAtRisk ?? "—"}</div><div className="metric-footer"><span>Due soon or overdue</span></div></article><article className="metric-card"><div className="metric-top">Monitor mode</div><div className="metric-value">Active</div><div className="metric-footer"><span>Notifications to assignees or managers</span></div></article></section>
+              <article className="surface-card"><div className="surface-heading"><div><span className="section-eyebrow">POLICY</span><h2>How SLA alerts work</h2><p>These are current defaults, not editable settings.</p></div></div><div className="sla-policy-list"><p><strong>At risk:</strong> An open claim has a deadline within the next 24 hours.</p><p><strong>Breached:</strong> An open claim deadline has passed.</p><p><strong>Recipients:</strong> Active assignees receive alerts; if unassigned, active admins and managers are notified.</p><p><strong>Deduplication:</strong> Alerts are upserted by user, claim, and alert kind.</p></div></article>
             </section>
           ) : (
             <>
