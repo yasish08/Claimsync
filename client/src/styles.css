@@ -58,3 +58,15 @@
 .analytics-priority{min-width:0}
 @keyframes fade-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:460px){.analytics-row{grid-template-columns:minmax(72px,1fr) minmax(45px,1.2fr) 24px;gap:8px;font-size:10px}.analytics-list{padding:14px}}
+
+/* Claims register and SLA status */
+.claims-register{min-width:0}
+.claims-filter-bar{display:grid;grid-template-columns:minmax(190px,2fr) minmax(130px,1fr) minmax(120px,1fr) auto;gap:11px;align-items:end}
+.claims-filter-bar label{display:grid;gap:7px;color:#aebed0;font-size:10px;font-weight:600}
+.claims-filter-bar input,.claims-filter-bar select{width:100%;min-width:0;border:1px solid #314259;border-radius:7px;background:#101d2e;color:#eaf0fa;padding:10px 11px;outline:none;font-size:10px}
+.claims-filter-bar input:focus,.claims-filter-bar select:focus{border-color:#68cdb5;box-shadow:0 0 0 3px #68cdb515}
+.claims-register-summary{display:flex;justify-content:space-between;gap:12px;padding:17px 0 0;color:#8fa4bc;font-size:10px}
+.sla-policy-list{padding:8px 20px 16px}
+.sla-policy-list p{padding:12px 0;margin:0;border-top:1px solid #263449;color:#9fb1c6;font-size:11px;line-height:1.7}
+.sla-policy-list strong{color:#e5eef8}
+@media(max-width:760px){.claims-filter-bar{grid-template-columns:1fr 1fr}.claims-filter-bar label:first-child{grid-column:1/-1}.claims-filter-bar>.cancel-button{grid-column:1/-1}.claims-register-summary{flex-direction:column;gap:5px}}
