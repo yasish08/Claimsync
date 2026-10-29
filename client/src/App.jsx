@@ -44,7 +44,8 @@ export default function App() {
   const [priorityClaims, setPriorityClaims] = useState(null);
   const [prioritySource, setPrioritySource] = useState("");
   const [agentWorkloads, setAgentWorkloads] = useState({});
-  const [claimsPagination, setClaimsPagination] = useState({ total: 0, totalPages: 1 });
+  const [claimsPagination, setClaimsPagination] = useState({ page: 1, pageSize: 100, total: 0, totalPages: 1 });
+  const [claimsPage, setClaimsPage] = useState(1);
   const [analytics, setAnalytics] = useState(null);
   const [agents, setAgents] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -104,7 +105,7 @@ export default function App() {
       if (!cancelled) { setNotice(error.message); if (error.message.includes("session expired")) { window.sessionStorage.removeItem("claimsync_token"); setToken(""); setCurrentUser(null); } }
     }).finally(() => { if (!cancelled) setClaimsLoading(false); });
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, claimsPage]);
 
   const loadPriorityQueue = async () => {
     if (!token) return;
@@ -332,12 +333,13 @@ export default function App() {
               <div className="section-title-row"><div><span className="section-eyebrow">CLAIM REGISTER</span><h2>All claims</h2><p>Search and filter claims in your workspace.</p></div><button type="button" className="login-submit" onClick={() => setClaimFormOpen(true)}>+ New claim</button></div>
               <article className="surface-card claims-register">
                 <div className="claims-filter-bar">
-                  <label>Search claims<input value={claimSearch} onChange={(event) => setClaimSearch(event.target.value)} placeholder="Claim number, claimant, policy…" /></label>
-                  <label>Status<select value={claimStatusFilter} onChange={(event) => setClaimStatusFilter(event.target.value)}><option value="ALL">All statuses</option>{["SUBMITTED","UNDER_REVIEW","NEEDS_INFORMATION","APPROVED","REJECTED","CLOSED"].map((status) => <option key={status} value={status}>{status.replaceAll("_"," ")}</option>)}</select></label>
-                  <label>Type<select value={claimTypeFilter} onChange={(event) => setClaimTypeFilter(event.target.value)}><option value="ALL">All types</option>{["AUTO","HEALTH","PROPERTY","TRAVEL","LIFE","OTHER"].map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
-                  <button type="button" className="cancel-button" onClick={() => { setClaimSearch(""); setClaimStatusFilter("ALL"); setClaimTypeFilter("ALL"); }}>Clear filters</button>
+                  <label>Search claims<input value={claimSearch} onChange={(event) => { setClaimSearch(event.target.value); setClaimsPage(1); }} placeholder="Claim number, claimant, policy…" /></label>
+                  <label>Status<select value={claimStatusFilter} onChange={(event) => { setClaimStatusFilter(event.target.value); setClaimsPage(1); }}><option value="ALL">All statuses</option>{["SUBMITTED","UNDER_REVIEW","NEEDS_INFORMATION","APPROVED","REJECTED","CLOSED"].map((status) => <option key={status} value={status}>{status.replaceAll("_"," ")}</option>)}</select></label>
+                  <label>Type<select value={claimTypeFilter} onChange={(event) => { setClaimTypeFilter(event.target.value); setClaimsPage(1); }}><option value="ALL">All types</option>{["AUTO","HEALTH","PROPERTY","TRAVEL","LIFE","OTHER"].map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                  <button type="button" className="cancel-button" onClick={() => { setClaimSearch(""); setClaimStatusFilter("ALL"); setClaimTypeFilter("ALL"); setClaimsPage(1); }}>Clear filters</button>
                 </div>
-                <div className="claims-register-summary"><span>{claimsViewRows.length} shown</span><span>{claimsPagination.total} total in database · first page loaded</span></div>
+                <div className="claims-register-summary"><span>{claimsViewRows.length} shown on this page</span><span>{claimsPagination.total} total in database · page {claimsPagination.page || claimsPage} of {Math.max(1, claimsPagination.totalPages || 1)}</span></div>
+                <div className="claims-pagination"><button type="button" className="cancel-button" disabled={claimsLoading || claimsPage <= 1} onClick={() => setClaimsPage((page) => Math.max(1, page - 1))}>← Previous</button><span>Page {claimsPagination.page || claimsPage} of {Math.max(1, claimsPagination.totalPages || 1)}</span><button type="button" className="cancel-button" disabled={claimsLoading || claimsPage >= (claimsPagination.totalPages || 1)} onClick={() => setClaimsPage((page) => Math.min(claimsPagination.totalPages || 1, page + 1))}>Next →</button></div>
                 {claimsLoading ? <div className="claims-empty-state">Loading claims…</div> : claimsViewRows.length ? <div className="claims-table-wrap"><table className="claims-table"><thead><tr><th>CLAIM</th><th>TYPE</th><th>AMOUNT</th><th>PRIORITY</th><th>STATUS</th><th>SLA DEADLINE</th></tr></thead><tbody>{claimsViewRows.map((claim) => <tr key={claim.id}><td><strong>{claim.claimNumber}</strong><small>{claim.claimantName} · {claim.policyNumber}</small></td><td>{claim.type}</td><td>{Number(claim.estimatedAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td><span className={"priority-badge " + String(claim.priority || "LOW").toLowerCase()}>{claim.priority}</span><small>Score {claim.priorityScore}</small></td><td><span className={"claim-status " + claim.status.toLowerCase()}>{claim.status.replaceAll("_"," ")}</span></td><td>{new Date(claim.slaDeadline).toLocaleString()}</td></tr>)}</tbody></table></div> : <div className="claims-empty-state">No claims match these filters. Try clearing filters.</div>}
               </article>
             </section>
