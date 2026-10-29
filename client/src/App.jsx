@@ -84,7 +84,7 @@ export default function App() {
     setClaimsLoading(true);
     Promise.all([
       fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`${API_URL}/api/claims?page=1&pageSize=100`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/api/claims?page=${claimsPage}&pageSize=100`, { headers: { Authorization: `Bearer ${token}` } }),
       fetch(`${API_URL}/api/analytics/overview`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null)
     ]).then(async ([userResponse, claimsResponse, analyticsResponse]) => {
       if (userResponse.status === 401 || claimsResponse.status === 401) throw new Error("Your session expired. Please sign in again.");
